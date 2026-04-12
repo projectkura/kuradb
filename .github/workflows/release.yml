@@ -46,11 +46,10 @@ jobs:
 
       - name: Bundle files
         run: |
-          mkdir -p ./temp/kuradb/{dist,lib,docs}
+          mkdir -p ./temp/kuradb/{dist,lib}
           cp ./{LICENSE,README.md,fxmanifest.lua} ./temp/kuradb/ || true
           cp -r ./dist/* ./temp/kuradb/dist/ || true
           cp -r ./lib/* ./temp/kuradb/lib/ || true
-          cp -r ./docs/* ./temp/kuradb/docs/ || true
           cd ./temp && zip -r ../kuradb.zip ./kuradb
 
       - name: Create release

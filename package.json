@@ -10,8 +10,7 @@
   "files": [
     "dist",
     "lib",
-    "fxmanifest.lua",
-    "docs"
+    "fxmanifest.lua"
   ],
   "scripts": {
     "build": "bun run build:manifest && bun run build:server && bun run build:lib",
@@ -19,8 +18,8 @@
     "build:server": "bun build ./src/index.ts --outfile ./dist/server.js --target node --format cjs",
     "build:lib": "tsc -p tsconfig.lib.json",
     "check": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.lib.json --noEmit",
-    "lint": "biome check biome.json build.js package.json tsconfig.json tsconfig.lib.json README.md src lib/KuraDB.ts lib/orm.ts docs",
-    "format": "biome format --write biome.json build.js package.json tsconfig.json tsconfig.lib.json README.md src lib/KuraDB.ts lib/orm.ts docs"
+    "lint": "biome check biome.json build.js package.json tsconfig.json tsconfig.lib.json README.md src lib/KuraDB.ts lib/orm.ts",
+    "format": "biome format --write biome.json build.js package.json tsconfig.json tsconfig.lib.json README.md src lib/KuraDB.ts lib/orm.ts"
   },
   "dependencies": {
     "postgres": "^3.4.7"
