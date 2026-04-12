@@ -48,6 +48,7 @@ export async function rawExecute(
     );
   }
 
+  const sql = pool;
   const type = getQueryType(query);
   let parameterSets: unknown[][];
 
@@ -62,14 +63,14 @@ export async function rawExecute(
 
     if (parameterSets.length === 1) {
       const request = normalizeQuery(query, parameterSets[0], type);
-      const result = await executeQuery(pool, invokingResource, request, { prepare });
+      const result = await executeQuery(sql, invokingResource, request, { prepare });
       finalResponse =
         prepare && type === null ? coercePreparedResult(result) : parseResponse(type, result);
     } else if (parameterSets.length > 5) {
       // Pipeline multiple parameter sets concurrently
       const requests = parameterSets.map((values) => normalizeQuery(query, values, type));
       const results = await Promise.all(
-        requests.map((request) => executeQueryNoWait(pool!, request, prepare))
+        requests.map((request) => executeQueryNoWait(sql, request, prepare))
       );
       finalResponse = results.map((result) =>
         prepare && type === null ? coercePreparedResult(result) : parseResponse(type, result)
@@ -78,7 +79,7 @@ export async function rawExecute(
       const responses: unknown[] = [];
       for (const values of parameterSets) {
         const request = normalizeQuery(query, values, type);
-        const result = await executeQuery(pool, invokingResource, request, { prepare });
+        const result = await executeQuery(sql, invokingResource, request, { prepare });
         const response =
           prepare && type === null ? coercePreparedResult(result) : parseResponse(type, result);
         responses.push(response);

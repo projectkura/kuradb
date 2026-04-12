@@ -4,13 +4,16 @@ import type {
   CFXCallback,
   NormalizedQuery,
   ParameterSet,
-  QueryResult,
-  QueryRow,
   TransactionOptions,
   TransactionQuery,
 } from '../types';
 import { normalizeTransactionQueries } from '../utils/sql';
-import { getTransactionBeginOptions, type DatabaseClient, executeQuery, executeQueryNoWait } from './connection';
+import {
+  type DatabaseClient,
+  executeQuery,
+  executeQueryNoWait,
+  getTransactionBeginOptions,
+} from './connection';
 import { pool } from './pool';
 
 const BATCH_CHUNK_SIZE = 500;

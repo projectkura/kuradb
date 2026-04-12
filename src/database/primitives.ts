@@ -1,5 +1,5 @@
-import { pipeline } from 'node:stream/promises';
 import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { logError } from '../logger';
 import type {
   BatchOptions,
@@ -9,7 +9,6 @@ import type {
   InsertManyOptions,
   ListenOptions,
   ListenSubscription,
-  NormalizedQuery,
   ParameterSet,
   QueryResult,
   QueryRow,
@@ -22,7 +21,12 @@ import {
   normalizeBatchParameters,
   normalizeQuery,
 } from '../utils/sql';
-import { executeQuery, executeQueryNoWait, getTransactionBeginOptions, type DatabaseClient } from './connection';
+import {
+  type DatabaseClient,
+  executeQuery,
+  executeQueryNoWait,
+  getTransactionBeginOptions,
+} from './connection';
 import { pool } from './pool';
 
 function safeInvokeCallback(cb: CFXCallback, value: unknown, invokingResource: string) {
@@ -51,14 +55,14 @@ async function executeBatchOnClient(
   options: BatchOptions = {}
 ) {
   const type = getQueryType(query);
-  const requests = parameterSets.map((values) => normalizeQuery(query, values as ParameterSet, type));
+  const requests = parameterSets.map((values) =>
+    normalizeQuery(query, values as ParameterSet, type)
+  );
 
   // Pipeline by default for large batches; always pipeline when explicitly requested
   if (options.pipeline || requests.length > 5) {
     const results = (await Promise.all(
-      requests.map((request) =>
-        executeQueryNoWait(client, request, options.prepare)
-      )
+      requests.map((request) => executeQueryNoWait(client, request, options.prepare))
     )) as QueryResult<QueryRow>[];
 
     return results.map((result) => parseResponse(type, result));
@@ -75,7 +79,10 @@ async function executeBatchOnClient(
   return responses;
 }
 
-function aggregateInsertManyResults(results: QueryResult<QueryRow>[], options: InsertManyOptions = {}) {
+function aggregateInsertManyResults(
+  results: QueryResult<QueryRow>[],
+  options: InsertManyOptions = {}
+) {
   if (options.returning === false) {
     return results.reduce((total, result) => total + Number(result.count ?? result.length ?? 0), 0);
   }
@@ -83,7 +90,7 @@ function aggregateInsertManyResults(results: QueryResult<QueryRow>[], options: I
   const rows = results.flatMap((result) => [...result]);
 
   if (!options.returning) {
-    return rows.map((row) => ('id' in row ? row.id ?? null : Object.values(row)[0] ?? null));
+    return rows.map((row) => ('id' in row ? (row.id ?? null) : (Object.values(row)[0] ?? null)));
   }
 
   return rows;
@@ -91,7 +98,10 @@ function aggregateInsertManyResults(results: QueryResult<QueryRow>[], options: I
 
 type ListenerState = {
   metaPromise: Promise<{ unlisten(): Promise<void> }> | null;
-  subscriptions: Map<number, { resource: string; onNotify: (value: string) => void; onListen?: () => void }>;
+  subscriptions: Map<
+    number,
+    { resource: string; onNotify: (value: string) => void; onListen?: () => void }
+  >;
 };
 
 const listeners = new Map<string, ListenerState>();
@@ -106,7 +116,9 @@ export async function rawBatch(
   isPromise?: boolean
 ) {
   cb = setCallback(options as any, cb);
-  options = (typeof options === 'object' && options && !Array.isArray(options) ? options : {}) as BatchOptions;
+  options = (
+    typeof options === 'object' && options && !Array.isArray(options) ? options : {}
+  ) as BatchOptions;
 
   if (!pool) {
     return logError(
@@ -345,7 +357,8 @@ export async function rawCopyFrom(
     await pipeline(Readable.from(chunks), writable);
 
     const bytes = chunks.reduce((total, chunk) => {
-      if (typeof chunk === 'string') return total + Buffer.byteLength(chunk, options.encoding ?? 'utf8');
+      if (typeof chunk === 'string')
+        return total + Buffer.byteLength(chunk, options.encoding ?? 'utf8');
       return total + chunk.byteLength;
     }, 0);
 

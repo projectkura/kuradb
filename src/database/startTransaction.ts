@@ -7,7 +7,7 @@ import type {
   TransactionOptions,
 } from '../types';
 import { normalizeQuery } from '../utils/sql';
-import { getTransactionBeginOptions, type DatabaseClient, executeQuery } from './connection';
+import { type DatabaseClient, executeQuery, getTransactionBeginOptions } from './connection';
 import { pool } from './pool';
 
 class ManualRollbackError extends Error {}
@@ -46,18 +46,15 @@ export async function startTransaction(
   let response = false;
 
   try {
-    await (pool as any).begin(
-      getTransactionBeginOptions(options),
-      async (sql: DatabaseClient) => {
-        const shouldCommit = await queries((statement, values) =>
-          runQuery(sql, invokingResource, statement, values, options)
-        );
+    await (pool as any).begin(getTransactionBeginOptions(options), async (sql: DatabaseClient) => {
+      const shouldCommit = await queries((statement, values) =>
+        runQuery(sql, invokingResource, statement, values, options)
+      );
 
-        if (shouldCommit === false) {
-          throw new ManualRollbackError('Transaction was cancelled by startTransaction callback.');
-        }
+      if (shouldCommit === false) {
+        throw new ManualRollbackError('Transaction was cancelled by startTransaction callback.');
       }
-    );
+    });
 
     response = true;
   } catch (err) {

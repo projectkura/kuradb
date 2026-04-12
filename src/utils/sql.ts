@@ -197,7 +197,10 @@ export function escapeIdentifier(identifier: string) {
   return parts.map((part) => `"${part}"`).join('.');
 }
 
-export function normalizeInsertRows(rows: Array<Record<string, unknown>>, options: InsertManyOptions = {}) {
+export function normalizeInsertRows(
+  rows: Array<Record<string, unknown>>,
+  options: InsertManyOptions = {}
+) {
   if (!Array.isArray(rows) || rows.length === 0) {
     throw new Error('insertMany rows must be a non-empty array of objects.');
   }

@@ -120,10 +120,7 @@ interface KuraDbClient {
     options?: ListenOptions | ResultCallback<ListenSubscription>,
     cb?: ResultCallback<ListenSubscription>
   ) => Promise<ListenSubscription>;
-  unlisten: (
-    subscriptionId: number,
-    cb?: ResultCallback<boolean>
-  ) => Promise<boolean>;
+  unlisten: (subscriptionId: number, cb?: ResultCallback<boolean>) => Promise<boolean>;
   copyFrom: (
     query: string,
     input: CopyChunk | CopyChunk[],
@@ -220,7 +217,12 @@ function normalizeTransactionArgs(
     );
   }
 
-  return [query, params, normalizedOptions as TransactionOptions | undefined, normalizedCallback] as const;
+  return [
+    query,
+    params,
+    normalizedOptions as TransactionOptions | undefined,
+    normalizedCallback,
+  ] as const;
 }
 
 function normalizeOptionalCallback<T, TOptions>(
@@ -264,44 +266,100 @@ export const kuradb: KuraDbClient = {
       callback();
     });
   },
-  async query<T = QueryResult | null>(query: Query, params?: Params | ResultCallback<T>, cb?: ResultCallback<T>) {
-    const [normalizedQuery, normalizedParams, normalizedCallback] = normalizeQueryArgs(query, params, cb);
+  async query<T = QueryResult | null>(
+    query: Query,
+    params?: Params | ResultCallback<T>,
+    cb?: ResultCallback<T>
+  ) {
+    const [normalizedQuery, normalizedParams, normalizedCallback] = normalizeQueryArgs(
+      query,
+      params,
+      cb
+    );
     const result = await execute('query', normalizedQuery, normalizedParams);
     if (normalizedCallback) normalizedCallback(result as T);
     return result as T;
   },
-  async single<T = Row | null>(query: Query, params?: Params | ResultCallback<T>, cb?: ResultCallback<T>) {
-    const [normalizedQuery, normalizedParams, normalizedCallback] = normalizeQueryArgs(query, params, cb);
+  async single<T = Row | null>(
+    query: Query,
+    params?: Params | ResultCallback<T>,
+    cb?: ResultCallback<T>
+  ) {
+    const [normalizedQuery, normalizedParams, normalizedCallback] = normalizeQueryArgs(
+      query,
+      params,
+      cb
+    );
     const result = await execute('single', normalizedQuery, normalizedParams);
     if (normalizedCallback) normalizedCallback(result as T);
     return result as T;
   },
-  async scalar<T = unknown | null>(query: Query, params?: Params | ResultCallback<T>, cb?: ResultCallback<T>) {
-    const [normalizedQuery, normalizedParams, normalizedCallback] = normalizeQueryArgs(query, params, cb);
+  async scalar<T = unknown | null>(
+    query: Query,
+    params?: Params | ResultCallback<T>,
+    cb?: ResultCallback<T>
+  ) {
+    const [normalizedQuery, normalizedParams, normalizedCallback] = normalizeQueryArgs(
+      query,
+      params,
+      cb
+    );
     const result = await execute('scalar', normalizedQuery, normalizedParams);
     if (normalizedCallback) normalizedCallback(result as T);
     return result as T;
   },
-  async update<T = number | null>(query: Query, params?: Params | ResultCallback<T>, cb?: ResultCallback<T>) {
-    const [normalizedQuery, normalizedParams, normalizedCallback] = normalizeQueryArgs(query, params, cb);
+  async update<T = number | null>(
+    query: Query,
+    params?: Params | ResultCallback<T>,
+    cb?: ResultCallback<T>
+  ) {
+    const [normalizedQuery, normalizedParams, normalizedCallback] = normalizeQueryArgs(
+      query,
+      params,
+      cb
+    );
     const result = await execute('update', normalizedQuery, normalizedParams);
     if (normalizedCallback) normalizedCallback(result as T);
     return result as T;
   },
-  async insert<T = unknown | null>(query: Query, params?: Params | ResultCallback<T>, cb?: ResultCallback<T>) {
-    const [normalizedQuery, normalizedParams, normalizedCallback] = normalizeQueryArgs(query, params, cb);
+  async insert<T = unknown | null>(
+    query: Query,
+    params?: Params | ResultCallback<T>,
+    cb?: ResultCallback<T>
+  ) {
+    const [normalizedQuery, normalizedParams, normalizedCallback] = normalizeQueryArgs(
+      query,
+      params,
+      cb
+    );
     const result = await execute('insert', normalizedQuery, normalizedParams);
     if (normalizedCallback) normalizedCallback(result as T);
     return result as T;
   },
-  async prepare<T = unknown | null>(query: Query, params?: Params | ResultCallback<T>, cb?: ResultCallback<T>) {
-    const [normalizedQuery, normalizedParams, normalizedCallback] = normalizeQueryArgs(query, params, cb);
+  async prepare<T = unknown | null>(
+    query: Query,
+    params?: Params | ResultCallback<T>,
+    cb?: ResultCallback<T>
+  ) {
+    const [normalizedQuery, normalizedParams, normalizedCallback] = normalizeQueryArgs(
+      query,
+      params,
+      cb
+    );
     const result = await execute('prepare', normalizedQuery, normalizedParams);
     if (normalizedCallback) normalizedCallback(result as T);
     return result as T;
   },
-  async rawExecute<T = unknown | null>(query: Query, params?: Params | ResultCallback<T>, cb?: ResultCallback<T>) {
-    const [normalizedQuery, normalizedParams, normalizedCallback] = normalizeQueryArgs(query, params, cb);
+  async rawExecute<T = unknown | null>(
+    query: Query,
+    params?: Params | ResultCallback<T>,
+    cb?: ResultCallback<T>
+  ) {
+    const [normalizedQuery, normalizedParams, normalizedCallback] = normalizeQueryArgs(
+      query,
+      params,
+      cb
+    );
     const result = await execute('rawExecute', normalizedQuery, normalizedParams);
     if (normalizedCallback) normalizedCallback(result as T);
     return result as T;
@@ -336,7 +394,12 @@ export const kuradb: KuraDbClient = {
   ) {
     const [normalizedQuery, normalizedParams, normalizedOptions, normalizedCallback] =
       normalizeTransactionArgs(query, params, options, cb);
-    const result = await execute('transaction', normalizedQuery, normalizedParams, normalizedOptions);
+    const result = await execute(
+      'transaction',
+      normalizedQuery,
+      normalizedParams,
+      normalizedOptions
+    );
     if (normalizedCallback) normalizedCallback(result as boolean);
     return result as boolean;
   },
