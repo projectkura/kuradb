@@ -1,0 +1,34 @@
+{
+  "name": "kuradb",
+  "version": "0.0.1",
+  "description": "FiveM PostgreSQL wrapper and ORM foundation for Project Kura",
+  "author": "Walteria.net",
+  "license": "LGPL-3.0",
+  "type": "commonjs",
+  "main": "dist/server.js",
+  "types": "lib/KuraDB.d.ts",
+  "files": [
+    "dist",
+    "lib",
+    "fxmanifest.lua",
+    "docs"
+  ],
+  "scripts": {
+    "build": "bun run build:manifest && bun run build:server && bun run build:lib",
+    "build:manifest": "bun run build.js",
+    "build:server": "bun build ./src/index.ts --outfile ./dist/server.js --target node --format cjs",
+    "build:lib": "tsc -p tsconfig.lib.json",
+    "check": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.lib.json --noEmit",
+    "lint": "biome check biome.json build.js package.json tsconfig.json tsconfig.lib.json README.md src lib/KuraDB.ts lib/orm.ts docs",
+    "format": "biome format --write biome.json build.js package.json tsconfig.json tsconfig.lib.json README.md src lib/KuraDB.ts lib/orm.ts docs"
+  },
+  "dependencies": {
+    "postgres": "^3.4.7"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.7",
+    "@citizenfx/server": "2.0.5132-1",
+    "@types/node": "^25.5.0",
+    "typescript": "^5.9.3"
+  }
+}

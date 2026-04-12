@@ -1,0 +1,7 @@
+node_modules
+dist
+lib/*.js
+lib/*.d.ts
+lib/*.map
+*.tsbuildinfo
+fxmanifest.lua

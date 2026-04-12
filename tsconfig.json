@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "lib": ["ES2023"],
+    "types": ["@citizenfx/server", "node"],
+    "strict": true,
+    "noEmit": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "config": ["./src/config"],
+      "types": ["./src/types"],
+      "database/*": ["./src/database/*"],
+      "utils/*": ["./src/utils/*"],
+      "logger": ["./src/logger"],
+      "orm": ["./src/orm"]
+    }
+  },
+  "include": ["src/**/*.ts", "build.js", "lib/KuraDB.ts"],
+  "exclude": ["dist", "node_modules"]
+}
