@@ -1,7 +1,13 @@
 import { logError } from '../logger';
-import type { CFXCallback, ParameterSet, QueryResult, QueryRow } from '../types';
+import type {
+  CFXCallback,
+  ParameterSet,
+  QueryResult,
+  QueryRow,
+  TransactionOptions,
+} from '../types';
 import { normalizeQuery } from '../utils/sql';
-import { applyTransactionIsolation, type DatabaseClient, executeQuery } from './connection';
+import { getTransactionBeginOptions, type DatabaseClient, executeQuery } from './connection';
 import { pool } from './pool';
 
 class ManualRollbackError extends Error {}
@@ -10,10 +16,13 @@ async function runQuery(
   client: DatabaseClient,
   invokingResource: string,
   query: string,
-  values?: ParameterSet
+  values?: ParameterSet,
+  options: TransactionOptions = {}
 ) {
   const request = normalizeQuery(query, values);
-  return executeQuery(client, invokingResource, request) as Promise<QueryResult<QueryRow>>;
+  return executeQuery(client, invokingResource, request, {
+    prepare: options.prepare,
+  }) as Promise<QueryResult<QueryRow>>;
 }
 
 export async function startTransaction(
@@ -21,6 +30,7 @@ export async function startTransaction(
   queries: (
     query: (statement: string, values?: ParameterSet) => Promise<QueryResult<QueryRow>>
   ) => Promise<boolean | undefined>,
+  options?: TransactionOptions,
   cb?: CFXCallback,
   isPromise?: boolean
 ) {
@@ -36,17 +46,18 @@ export async function startTransaction(
   let response = false;
 
   try {
-    await (pool as any).begin(async (sql: DatabaseClient) => {
-      await applyTransactionIsolation(sql);
+    await (pool as any).begin(
+      getTransactionBeginOptions(options),
+      async (sql: DatabaseClient) => {
+        const shouldCommit = await queries((statement, values) =>
+          runQuery(sql, invokingResource, statement, values, options)
+        );
 
-      const shouldCommit = await queries((statement, values) =>
-        runQuery(sql, invokingResource, statement, values)
-      );
-
-      if (shouldCommit === false) {
-        throw new ManualRollbackError('Transaction was cancelled by startTransaction callback.');
+        if (shouldCommit === false) {
+          throw new ManualRollbackError('Transaction was cancelled by startTransaction callback.');
+        }
       }
-    });
+    );
 
     response = true;
   } catch (err) {

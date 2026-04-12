@@ -1,5 +1,29 @@
-import { pool, rawExecute, rawQuery, rawTransaction, startTransaction } from './database';
-import type { CFXCallback, CFXParameters, ParameterSet, TransactionQuery } from './types';
+import {
+  pool,
+  rawBatch,
+  rawCopyFrom,
+  rawCopyTo,
+  rawExecute,
+  rawInsertMany,
+  rawListen,
+  rawNotify,
+  rawQuery,
+  rawTransaction,
+  rawUnlisten,
+  startTransaction,
+} from './database';
+import type {
+  BatchOptions,
+  CFXCallback,
+  CFXParameters,
+  CopyInput,
+  CopyOptions,
+  InsertManyOptions,
+  ListenOptions,
+  ParameterSet,
+  TransactionOptions,
+  TransactionQuery,
+} from './types';
 import { sleep } from './utils/sleep';
 import './database';
 
@@ -84,23 +108,99 @@ KuraDB.rawExecute = (
   void rawExecute(invokingResource, query, parameters, cb, isPromise);
 };
 
-KuraDB.transaction = (
-  queries: TransactionQuery,
-  parameters?: ParameterSet,
+KuraDB.batch = (
+  query: string,
+  parameterSets?: Array<Record<string, unknown> | unknown[]>,
+  options?: BatchOptions,
   cb?: CFXCallback,
   invokingResource = GetInvokingResource(),
   isPromise?: boolean
 ) => {
-  void rawTransaction(invokingResource, queries, parameters, cb, isPromise);
+  void rawBatch(invokingResource, query, parameterSets, options, cb, isPromise);
+};
+
+KuraDB.insertMany = (
+  target: string,
+  rows: Array<Record<string, unknown>>,
+  options?: InsertManyOptions,
+  cb?: CFXCallback,
+  invokingResource = GetInvokingResource(),
+  isPromise?: boolean
+) => {
+  void rawInsertMany(invokingResource, target, rows, options, cb, isPromise);
+};
+
+KuraDB.transaction = (
+  queries: TransactionQuery,
+  parameters?: ParameterSet,
+  options?: TransactionOptions | CFXCallback,
+  cb?: CFXCallback,
+  invokingResource = GetInvokingResource(),
+  isPromise?: boolean
+) => {
+  void rawTransaction(invokingResource, queries, parameters, options, cb, isPromise);
 };
 
 KuraDB.startTransaction = (
   queries: (
     query: (statement: string, values?: ParameterSet) => Promise<unknown>
   ) => Promise<boolean | undefined>,
+  options?: TransactionOptions,
+  cb?: CFXCallback,
   invokingResource = GetInvokingResource()
 ) => {
-  return startTransaction(invokingResource, queries, undefined, true);
+  return startTransaction(invokingResource, queries as any, options, cb, true);
+};
+
+KuraDB.notify = (
+  channel: string,
+  payload?: string | null,
+  cb?: CFXCallback,
+  invokingResource = GetInvokingResource(),
+  isPromise?: boolean
+) => {
+  void rawNotify(invokingResource, channel, payload, cb, isPromise);
+};
+
+KuraDB.listen = (
+  channel: string,
+  onNotify: (value: string) => void,
+  options?: ListenOptions,
+  cb?: CFXCallback,
+  invokingResource = GetInvokingResource(),
+  isPromise?: boolean
+) => {
+  void rawListen(invokingResource, channel, onNotify, options, cb, isPromise);
+};
+
+KuraDB.unlisten = (
+  subscriptionId: number,
+  cb?: CFXCallback,
+  invokingResource = GetInvokingResource(),
+  isPromise?: boolean
+) => {
+  void rawUnlisten(invokingResource, subscriptionId, cb, isPromise);
+};
+
+KuraDB.copyFrom = (
+  query: string,
+  input: CopyInput,
+  options?: CopyOptions,
+  cb?: CFXCallback,
+  invokingResource = GetInvokingResource(),
+  isPromise?: boolean
+) => {
+  void rawCopyFrom(invokingResource, query, input, options, cb, isPromise);
+};
+
+KuraDB.copyTo = (
+  query: string,
+  options?: CopyOptions,
+  cb?: CFXCallback,
+  invokingResource = GetInvokingResource(),
+  isPromise?: boolean
+) => {
+  void rawCopyTo(invokingResource, query, options, cb, isPromise);
 };
 
 KuraDB.store = (query: string, cb: Function) => {
@@ -108,16 +208,15 @@ KuraDB.store = (query: string, cb: Function) => {
 };
 
 function exportAsync(method: string) {
-  return (query: unknown, parameters?: unknown, invokingResource = GetInvokingResource()) => {
+  return (...args: unknown[]) => {
     return new Promise((resolve, reject) => {
       KuraDB[method](
-        query,
-        parameters,
+        ...args,
         (result: unknown, err?: string) => {
           if (err) return reject(new Error(err));
           resolve(result);
         },
-        invokingResource,
+        GetInvokingResource(),
         true
       );
     });

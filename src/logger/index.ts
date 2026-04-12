@@ -31,14 +31,15 @@ export function logQuery(
     at: Date.now(),
   };
 
-  const current = queryLogs.get(resource) ?? [];
+  let current = queryLogs.get(resource) ?? [];
   current.push(entry);
 
-  if (current.length > debugState.logSize) {
-    current.splice(0, current.length - debugState.logSize);
+  if (current.length > debugState.logSize * 2) {
+    current = current.slice(-debugState.logSize);
+    queryLogs.set(resource, current);
+  } else if (!queryLogs.has(resource)) {
+    queryLogs.set(resource, current);
   }
-
-  queryLogs.set(resource, current);
 
   if (rowCount >= debugState.resultSetWarning) {
     console.warn(

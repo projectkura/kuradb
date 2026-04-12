@@ -1,4 +1,4 @@
-import type { KuraDbDebugState } from './types';
+import type { KuraDbDebugState, TransactionIsolationLevel } from './types';
 
 export const KURADB_RESOURCE_NAME = 'kuradb';
 export const KURADB_MINIMUM_POSTGRES_VERSION = '18.3.0';
@@ -57,6 +57,8 @@ export interface ConnectionPoolOptions {
   maxConnections: number;
   maxLifetime: number;
   prepare: boolean;
+  publications: string;
+  fetchTypes: boolean;
 }
 
 export function getConnectionPoolOptions(): ConnectionPoolOptions {
@@ -67,7 +69,13 @@ export function getConnectionPoolOptions(): ConnectionPoolOptions {
     maxConnections: GetConvarInt('kuradb_max_connections', 10),
     maxLifetime: GetConvarInt('kuradb_max_lifetime', 1800),
     prepare: GetConvar('kuradb_prepare', 'true') !== 'false',
+    publications: GetConvar('kuradb_publications', 'alltables').trim() || 'alltables',
+    fetchTypes: GetConvar('kuradb_fetch_types', 'true') !== 'false',
   };
+}
+
+export function getConfiguredTransactionIsolationLevel(): TransactionIsolationLevel {
+  return getTransactionIsolationLevel();
 }
 
 export function assertConnectionString() {

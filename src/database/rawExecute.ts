@@ -8,7 +8,7 @@ import {
   normalizeBatchParameters,
   normalizeQuery,
 } from '../utils/sql';
-import { executeQuery } from './connection';
+import { executeQuery, executeQueryNoWait } from './connection';
 import { pool } from './pool';
 
 function getQueryType(query: string): QueryType {
@@ -58,17 +58,33 @@ export async function rawExecute(
   }
 
   try {
-    const responses: unknown[] = [];
+    let finalResponse: unknown;
 
-    for (const values of parameterSets) {
-      const request = normalizeQuery(query, values, type);
+    if (parameterSets.length === 1) {
+      const request = normalizeQuery(query, parameterSets[0], type);
       const result = await executeQuery(pool, invokingResource, request, { prepare });
-      const response =
+      finalResponse =
         prepare && type === null ? coercePreparedResult(result) : parseResponse(type, result);
-      responses.push(response);
+    } else if (parameterSets.length > 5) {
+      // Pipeline multiple parameter sets concurrently
+      const requests = parameterSets.map((values) => normalizeQuery(query, values, type));
+      const results = await Promise.all(
+        requests.map((request) => executeQueryNoWait(pool!, request, prepare))
+      );
+      finalResponse = results.map((result) =>
+        prepare && type === null ? coercePreparedResult(result) : parseResponse(type, result)
+      );
+    } else {
+      const responses: unknown[] = [];
+      for (const values of parameterSets) {
+        const request = normalizeQuery(query, values, type);
+        const result = await executeQuery(pool, invokingResource, request, { prepare });
+        const response =
+          prepare && type === null ? coercePreparedResult(result) : parseResponse(type, result);
+        responses.push(response);
+      }
+      finalResponse = responses;
     }
-
-    const finalResponse = responses.length === 1 ? responses[0] : responses;
 
     if (!cb) return finalResponse;
     safeInvokeCallback(cb, finalResponse, invokingResource);

@@ -25,6 +25,7 @@ on('onResourceStop', (resourceName: string) => {
 
 export * from './connection';
 export * from './pool';
+export * from './primitives';
 export * from './rawExecute';
 export * from './rawQuery';
 export * from './rawTransaction';

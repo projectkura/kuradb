@@ -27,6 +27,8 @@ export async function createConnectionPool() {
     max_lifetime: config.maxLifetime,
     max: config.maxConnections,
     prepare: config.prepare,
+    fetch_types: config.fetchTypes,
+    publications: config.publications,
   });
 
   try {
