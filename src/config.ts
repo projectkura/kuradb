@@ -116,6 +116,7 @@ RegisterCommand(
           SetConvar('kuradb_debug', JSON.stringify(kuradbDebug) || 'false');
           return console.log(`^3Removed ${args[1]} from kuradb_debug^0`);
         }
+        break;
 
       default:
         return console.log(`^3Usage: kuradb_debug add|remove <resource>^0`);

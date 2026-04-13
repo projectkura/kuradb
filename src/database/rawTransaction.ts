@@ -7,13 +7,8 @@ import type {
   TransactionOptions,
   TransactionQuery,
 } from '../types';
-import { scheduleTick } from '../utils/scheduleTick';
 import { normalizeTransactionQueries } from '../utils/sql';
-import {
-  type DatabaseClient,
-  executeQuery,
-  withTransaction,
-} from './connection';
+import { type DatabaseClient, executeQuery, withTransaction } from './connection';
 import { pool } from './pool';
 
 const MAX_PG_PARAMS = 65535;
