@@ -1,7 +1,7 @@
 import type { KuraDbDebugState, TransactionIsolationLevel } from './types';
 
 export const KURADB_RESOURCE_NAME = 'kuradb';
-export const KURADB_MINIMUM_POSTGRES_VERSION = '18.3.0';
+export const KURADB_MINIMUM_POSTGRES_VERSION = '17.0.0';
 
 export function getConnectionString() {
   return GetConvar('kuradb_connection_string', '').trim();
@@ -56,9 +56,6 @@ export interface ConnectionPoolOptions {
   idleTimeout: number;
   maxConnections: number;
   maxLifetime: number;
-  prepare: boolean;
-  publications: string;
-  fetchTypes: boolean;
 }
 
 export function getConnectionPoolOptions(): ConnectionPoolOptions {
@@ -68,9 +65,6 @@ export function getConnectionPoolOptions(): ConnectionPoolOptions {
     idleTimeout: GetConvarInt('kuradb_idle_timeout', 30),
     maxConnections: GetConvarInt('kuradb_max_connections', 10),
     maxLifetime: GetConvarInt('kuradb_max_lifetime', 1800),
-    prepare: GetConvar('kuradb_prepare', 'true') !== 'false',
-    publications: GetConvar('kuradb_publications', 'alltables').trim() || 'alltables',
-    fetchTypes: GetConvar('kuradb_fetch_types', 'true') !== 'false',
   };
 }
 
@@ -101,6 +95,34 @@ export function assertConnectionString() {
     throw new Error('kuradb_connection_string must include a database name.');
   }
 }
+
+RegisterCommand(
+  'kuradb_debug',
+  (source: number, args: string[]) => {
+    if (source !== 0) return console.log('^3This command can only be run server side^0');
+    switch (args[0]) {
+      case 'add':
+        if (!Array.isArray(kuradbDebug)) kuradbDebug = [];
+        kuradbDebug.push(args[1]);
+        SetConvar('kuradb_debug', JSON.stringify(kuradbDebug));
+        return console.log(`^3Added ${args[1]} to kuradb_debug^0`);
+
+      case 'remove':
+        if (Array.isArray(kuradbDebug)) {
+          const index = kuradbDebug.indexOf(args[1]);
+          if (index === -1) return;
+          kuradbDebug.splice(index, 1);
+          if (kuradbDebug.length === 0) kuradbDebug = false;
+          SetConvar('kuradb_debug', JSON.stringify(kuradbDebug) || 'false');
+          return console.log(`^3Removed ${args[1]} from kuradb_debug^0`);
+        }
+
+      default:
+        return console.log(`^3Usage: kuradb_debug add|remove <resource>^0`);
+    }
+  },
+  true
+);
 
 export function maskConnectionString(connectionString: string) {
   try {

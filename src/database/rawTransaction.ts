@@ -7,16 +7,17 @@ import type {
   TransactionOptions,
   TransactionQuery,
 } from '../types';
+import { scheduleTick } from '../utils/scheduleTick';
 import { normalizeTransactionQueries } from '../utils/sql';
 import {
   type DatabaseClient,
   executeQuery,
-  executeQueryNoWait,
-  getTransactionBeginOptions,
+  withTransaction,
 } from './connection';
 import { pool } from './pool';
 
-const BATCH_CHUNK_SIZE = 500;
+const MAX_PG_PARAMS = 65535;
+const MAX_CHUNK_ROWS = 1000;
 
 // Matches: INSERT INTO "table" ("col1", "col2") VALUES ($1, $2)
 // Captures: prefix up to VALUES, and the ($1, $2) placeholder tuple
@@ -44,10 +45,11 @@ function collapseInserts(queries: NormalizedQuery[]): NormalizedQuery[] {
   const prefix = match[1]; // "INSERT INTO ... VALUES "
   const returning = match[3] ?? '';
   const paramsPerRow = queries[0].values.length;
+  const chunkSize = Math.min(MAX_CHUNK_ROWS, Math.floor(MAX_PG_PARAMS / paramsPerRow));
   const result: NormalizedQuery[] = [];
 
-  for (let offset = 0; offset < queries.length; offset += BATCH_CHUNK_SIZE) {
-    const chunk = queries.slice(offset, offset + BATCH_CHUNK_SIZE);
+  for (let offset = 0; offset < queries.length; offset += chunkSize) {
+    const chunk = queries.slice(offset, offset + chunkSize);
     const allValues: unknown[] = [];
     const tuples: string[] = [];
 
@@ -140,46 +142,33 @@ export async function rawTransaction(
   const startedAt = performance.now();
 
   try {
-    await (pool as any).begin(
-      getTransactionBeginOptions(normalized.options),
-      async (sql: DatabaseClient) => {
-        const batchable = canBatchInserts(normalizedQueries);
+    await withTransaction(pool, normalized.options, async (client: DatabaseClient) => {
+      const batchable = canBatchInserts(normalizedQueries);
 
-        if (batchable && normalizedQueries.length > 5) {
-          // Collapse identical INSERT statements into multi-row INSERTs
-          // to dramatically reduce round-trips and per-query overhead.
-          const batched = collapseInserts(normalizedQueries);
+      if (batchable && normalizedQueries.length > 1) {
+        const batched = collapseInserts(normalizedQueries);
 
-          for (const request of batched) {
-            await executeQueryNoWait(sql, request, false).catch((err) => {
-              currentQuery = request;
-              throw err;
-            });
-          }
-        } else if (normalizedQueries.length > 5) {
-          // Pipeline all queries concurrently over the transaction connection.
-          const prepare = normalized.options.prepare;
-          const promises = normalizedQueries.map((request) =>
-            executeQueryNoWait(sql, request, prepare).catch((err) => {
-              currentQuery = request;
-              throw err;
-            })
-          );
-
-          await Promise.all(promises);
-        } else {
-          for (const request of normalizedQueries) {
-            await executeQuery(sql, invokingResource, request, {
-              prepare: normalized.options.prepare,
-              silent: true,
-            }).catch((err) => {
-              currentQuery = request;
-              throw err;
-            });
-          }
+        for (const request of batched) {
+          await executeQuery(client, invokingResource, request, {
+            prepare: false,
+            silent: true,
+          }).catch((err) => {
+            currentQuery = request;
+            throw err;
+          });
+        }
+      } else {
+        for (const request of normalizedQueries) {
+          await executeQuery(client, invokingResource, request, {
+            prepare: normalized.options.prepare,
+            silent: true,
+          }).catch((err) => {
+            currentQuery = request;
+            throw err;
+          });
         }
       }
-    );
+    });
 
     response = true;
 

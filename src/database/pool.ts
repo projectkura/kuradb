@@ -1,14 +1,19 @@
-import postgres, { type Sql } from 'postgres';
+import pg from 'pg';
 import {
   assertConnectionString,
   getConnectionPoolOptions,
   KURADB_MINIMUM_POSTGRES_VERSION,
   maskConnectionString,
 } from '../config';
-import type { QueryRow } from '../types';
 import { isMinimumVersion } from '../utils/versions';
 
-export let pool: Sql<Record<string, unknown>> | null = null;
+let PgNative: typeof pg.Client | undefined;
+
+try {
+  PgNative = require('pg-native');
+} catch {}
+
+export let pool: pg.Pool | null = null;
 export let dbVersion = '';
 
 export async function createConnectionPool() {
@@ -21,19 +26,23 @@ export async function createConnectionPool() {
     return;
   }
 
-  const sql = postgres(config.connectionString, {
-    connect_timeout: config.connectTimeout,
-    idle_timeout: config.idleTimeout,
-    max_lifetime: config.maxLifetime,
+  const poolConfig: pg.PoolConfig = {
+    connectionString: config.connectionString,
+    connectionTimeoutMillis: config.connectTimeout * 1000,
+    idleTimeoutMillis: config.idleTimeout * 1000,
     max: config.maxConnections,
-    prepare: config.prepare,
-    fetch_types: config.fetchTypes,
-    publications: config.publications,
-  });
+    maxLifetimeSeconds: config.maxLifetime,
+  };
+
+  if (PgNative) {
+    poolConfig.Client = PgNative as any;
+  }
+
+  const newPool = new pg.Pool(poolConfig);
 
   try {
-    const versionRows = (await sql.unsafe('SHOW server_version')) as Array<QueryRow>;
-    const version = String(versionRows[0]?.server_version ?? '0.0.0');
+    const versionResult = await newPool.query('SHOW server_version');
+    const version = String(versionResult.rows[0]?.server_version ?? '0.0.0');
 
     if (!isMinimumVersion(version, KURADB_MINIMUM_POSTGRES_VERSION)) {
       throw new Error(
@@ -42,15 +51,18 @@ export async function createConnectionPool() {
     }
 
     dbVersion = version;
-    pool = sql;
+    pool = newPool;
 
-    console.log(`^5[PostgreSQL ${version}] ^2Database server connection established for kuradb.^0`);
+    const driverLabel = PgNative ? 'pg-native' : 'pg';
+    console.log(
+      `^5[PostgreSQL ${version}] ^2Database server connection established for kuradb (${driverLabel}).^0`
+    );
   } catch (err) {
     console.error(`^1[kuradb] Unable to establish a database connection.^0`);
     console.error(maskConnectionString(config.connectionString));
     console.error(err instanceof Error ? err.message : String(err));
 
-    await (sql as any).end({ timeout: 0 }).catch(() => {});
+    await newPool.end().catch(() => {});
   }
 }
 
@@ -58,5 +70,5 @@ export async function closeConnectionPool() {
   if (!pool) return;
   const currentPool = pool;
   pool = null;
-  await (currentPool as any).end({ timeout: 5 }).catch(() => {});
+  await currentPool.end().catch(() => {});
 }

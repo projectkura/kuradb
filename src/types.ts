@@ -56,9 +56,6 @@ export type QueryRow = Record<string, unknown>;
 export type QueryResult<T extends QueryRow = QueryRow> = T[] & {
   command?: string;
   count?: number | null;
-  columns?: unknown[];
-  statement?: unknown;
-  state?: unknown;
 };
 
 export interface QueryLogEntry {

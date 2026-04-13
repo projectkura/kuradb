@@ -7,7 +7,7 @@ import type {
   TransactionOptions,
 } from '../types';
 import { normalizeQuery } from '../utils/sql';
-import { type DatabaseClient, executeQuery, getTransactionBeginOptions } from './connection';
+import { type DatabaseClient, executeQuery, withTransaction } from './connection';
 import { pool } from './pool';
 
 class ManualRollbackError extends Error {}
@@ -46,9 +46,9 @@ export async function startTransaction(
   let response = false;
 
   try {
-    await (pool as any).begin(getTransactionBeginOptions(options), async (sql: DatabaseClient) => {
+    await withTransaction(pool, options ?? {}, async (client: DatabaseClient) => {
       const shouldCommit = await queries((statement, values) =>
-        runQuery(sql, invokingResource, statement, values, options)
+        runQuery(client, invokingResource, statement, values, options)
       );
 
       if (shouldCommit === false) {

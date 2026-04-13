@@ -76,6 +76,14 @@ export function logError(
 
   console.error(`^1[kuradb] ${resource} failed to execute a query.\n${message}^0`);
 
+  TriggerEvent('kuradb:error', {
+    query,
+    parameters,
+    message: err instanceof Error ? err.message : String(err),
+    err,
+    resource,
+  });
+
   if (cb) {
     cb(null, message);
     return;

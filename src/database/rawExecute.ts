@@ -8,7 +8,7 @@ import {
   normalizeBatchParameters,
   normalizeQuery,
 } from '../utils/sql';
-import { executeQuery, executeQueryNoWait } from './connection';
+import { executeQuery } from './connection';
 import { pool } from './pool';
 
 function getQueryType(query: string): QueryType {
@@ -66,15 +66,6 @@ export async function rawExecute(
       const result = await executeQuery(sql, invokingResource, request, { prepare });
       finalResponse =
         prepare && type === null ? coercePreparedResult(result) : parseResponse(type, result);
-    } else if (parameterSets.length > 5) {
-      // Pipeline multiple parameter sets concurrently
-      const requests = parameterSets.map((values) => normalizeQuery(query, values, type));
-      const results = await Promise.all(
-        requests.map((request) => executeQueryNoWait(sql, request, prepare))
-      );
-      finalResponse = results.map((result) =>
-        prepare && type === null ? coercePreparedResult(result) : parseResponse(type, result)
-      );
     } else {
       const responses: unknown[] = [];
       for (const values of parameterSets) {

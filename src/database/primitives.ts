@@ -1,5 +1,8 @@
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
+import pg from 'pg';
+import { from as copyFromStream, to as copyToStream } from 'pg-copy-streams';
+import { getConnectionPoolOptions } from '../config';
 import { logError } from '../logger';
 import type {
   BatchOptions,
@@ -14,6 +17,7 @@ import type {
   QueryRow,
 } from '../types';
 import { parseResponse } from '../utils/parseResponse';
+import { scheduleTick } from '../utils/scheduleTick';
 import { setCallback } from '../utils/setCallback';
 import {
   buildInsertManyQuery,
@@ -25,7 +29,7 @@ import {
   type DatabaseClient,
   executeQuery,
   executeQueryNoWait,
-  getTransactionBeginOptions,
+  withTransaction,
 } from './connection';
 import { pool } from './pool';
 
@@ -59,8 +63,7 @@ async function executeBatchOnClient(
     normalizeQuery(query, values as ParameterSet, type)
   );
 
-  // Pipeline by default for large batches; always pipeline when explicitly requested
-  if (options.pipeline || requests.length > 5) {
+  if (requests.length > 1) {
     const results = (await Promise.all(
       requests.map((request) => executeQueryNoWait(client, request, options.prepare))
     )) as QueryResult<QueryRow>[];
@@ -97,7 +100,8 @@ function aggregateInsertManyResults(
 }
 
 type ListenerState = {
-  metaPromise: Promise<{ unlisten(): Promise<void> }> | null;
+  client: pg.Client | null;
+  connecting: Promise<void> | null;
   subscriptions: Map<
     number,
     { resource: string; onNotify: (value: string) => void; onListen?: () => void }
@@ -106,6 +110,84 @@ type ListenerState = {
 
 const listeners = new Map<string, ListenerState>();
 let nextListenerId = 1;
+
+function createListenClient(): pg.Client {
+  const config = getConnectionPoolOptions();
+  return new pg.Client({ connectionString: config.connectionString });
+}
+
+function escapeChannelName(channel: string) {
+  return `"${channel.replace(/"/g, '""')}"`;
+}
+
+async function ensureListenClient(channel: string, state: ListenerState) {
+  if (state.client) return;
+
+  if (state.connecting) {
+    await state.connecting;
+    return;
+  }
+
+  const client = createListenClient();
+
+  state.connecting = (async () => {
+    await client.connect();
+    await client.query(`LISTEN ${escapeChannelName(channel)}`);
+
+    client.on('notification', (msg) => {
+      if (msg.channel !== channel) return;
+      const current = listeners.get(channel);
+      if (!current) return;
+
+      for (const subscription of current.subscriptions.values()) {
+        try {
+          subscription.onNotify(msg.payload ?? '');
+        } catch {}
+      }
+    });
+
+    state.client = client;
+    state.connecting = null;
+
+    for (const subscription of state.subscriptions.values()) {
+      try {
+        subscription.onListen?.();
+      } catch {}
+    }
+  })();
+
+  await state.connecting;
+}
+
+async function teardownListenClient(channel: string, state: ListenerState) {
+  if (state.connecting) {
+    await state.connecting.catch(() => {});
+  }
+
+  if (state.client) {
+    await state.client.query(`UNLISTEN ${escapeChannelName(channel)}`).catch(() => {});
+    await state.client.end().catch(() => {});
+    state.client = null;
+  }
+
+  listeners.delete(channel);
+}
+
+on('onResourceStop', (resourceName: string) => {
+  if (resourceName === GetCurrentResourceName()) return;
+
+  for (const [channel, state] of listeners.entries()) {
+    for (const [id, sub] of state.subscriptions.entries()) {
+      if (sub.resource === resourceName) {
+        state.subscriptions.delete(id);
+      }
+    }
+
+    if (state.subscriptions.size === 0) {
+      void teardownListenClient(channel, state);
+    }
+  }
+});
 
 export async function rawBatch(
   invokingResource: string,
@@ -138,9 +220,11 @@ export async function rawBatch(
   }
 
   try {
+    scheduleTick();
+
     const response = options.transactional
-      ? await (pool as any).begin(getTransactionBeginOptions(options), (sql: DatabaseClient) =>
-          executeBatchOnClient(sql, invokingResource, query, parameterSets, options)
+      ? await withTransaction(pool, options, (client) =>
+          executeBatchOnClient(client, invokingResource, query, parameterSets, options)
         )
       : await executeBatchOnClient(pool, invokingResource, query, parameterSets, options);
 
@@ -249,30 +333,11 @@ export async function rawListen(
 
     if (!state) {
       state = {
-        metaPromise: null,
+        client: null,
+        connecting: null,
         subscriptions: new Map(),
       };
       listeners.set(channel, state);
-
-      state.metaPromise = pool.listen(
-        channel,
-        (value: string) => {
-          const current = listeners.get(channel);
-          if (!current) return;
-
-          for (const subscription of current.subscriptions.values()) {
-            subscription.onNotify(value);
-          }
-        },
-        () => {
-          const current = listeners.get(channel);
-          if (!current) return;
-
-          for (const subscription of current.subscriptions.values()) {
-            subscription.onListen?.();
-          }
-        }
-      ) as Promise<{ unlisten(): Promise<void> }>;
     }
 
     state.subscriptions.set(id, {
@@ -281,7 +346,7 @@ export async function rawListen(
       onListen: options.onListen,
     });
 
-    await state.metaPromise;
+    await ensureListenClient(channel, state);
 
     const response: ListenSubscription = { id, channel, resource: invokingResource };
     if (!cb) return response;
@@ -310,10 +375,8 @@ export async function rawUnlisten(
     for (const [channel, state] of listeners.entries()) {
       if (!state.subscriptions.delete(subscriptionId)) continue;
 
-      if (state.subscriptions.size === 0 && state.metaPromise) {
-        const meta = await state.metaPromise;
-        await meta.unlisten();
-        listeners.delete(channel);
+      if (state.subscriptions.size === 0) {
+        await teardownListenClient(channel, state);
       }
 
       if (!cb) return true;
@@ -326,6 +389,11 @@ export async function rawUnlisten(
   } catch (err) {
     return logError(invokingResource, cb, isPromise, err);
   }
+}
+
+function createPureJsClient(): pg.Client {
+  const config = getConnectionPoolOptions();
+  return new pg.Client({ connectionString: config.connectionString });
 }
 
 export async function rawCopyFrom(
@@ -351,10 +419,13 @@ export async function rawCopyFrom(
     );
   }
 
+  const client = createPureJsClient();
+
   try {
+    await client.connect();
     const chunks = Array.isArray(input) ? input : [input];
-    const writable = await (pool as any).unsafe(query, []).writable();
-    await pipeline(Readable.from(chunks), writable);
+    const stream = client.query(copyFromStream(query));
+    await pipeline(Readable.from(chunks), stream);
 
     const bytes = chunks.reduce((total, chunk) => {
       if (typeof chunk === 'string')
@@ -362,15 +433,14 @@ export async function rawCopyFrom(
       return total + chunk.byteLength;
     }, 0);
 
-    const response = {
-      bytes,
-      chunks: chunks.length,
-    };
+    const response = { bytes, chunks: chunks.length };
 
     if (!cb) return response;
     safeInvokeCallback(cb, response, invokingResource);
   } catch (err) {
     return logError(invokingResource, cb, isPromise, err, query);
+  } finally {
+    await client.end().catch(() => {});
   }
 }
 
@@ -396,12 +466,17 @@ export async function rawCopyTo(
     );
   }
 
+  const client = createPureJsClient();
+
   try {
-    const readable = await (pool as any).unsafe(query, []).readable();
+    await client.connect();
+    const stream = client.query(copyToStream(query));
     const chunks: Buffer[] = [];
 
-    for await (const chunk of readable as AsyncIterable<Buffer | string>) {
-      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, options.encoding ?? 'utf8'));
+    for await (const chunk of stream as AsyncIterable<Buffer | string>) {
+      chunks.push(
+        Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, options.encoding ?? 'utf8')
+      );
     }
 
     const response = Buffer.concat(chunks).toString(options.encoding ?? 'utf8');
@@ -410,5 +485,7 @@ export async function rawCopyTo(
     safeInvokeCallback(cb, response, invokingResource);
   } catch (err) {
     return logError(invokingResource, cb, isPromise, err, query);
+  } finally {
+    await client.end().catch(() => {});
   }
 }
