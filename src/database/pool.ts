@@ -12,7 +12,9 @@ let PgNative: typeof pg.Client | undefined;
 if (process.platform !== 'win32') {
   try {
     PgNative = require('pg-native');
-  } catch {}
+  } catch (err) {
+    console.error('^3[kuradb] pg-native load failed:^0', err instanceof Error ? err.message : String(err));
+  }
 }
 
 export let pool: pg.Pool | null = null;
