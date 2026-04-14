@@ -13,7 +13,10 @@ if (process.platform !== 'win32') {
   try {
     PgNative = require('pg-native');
   } catch (err) {
-    console.error('^3[kuradb] pg-native load failed:^0', err instanceof Error ? err.message : String(err));
+    console.error(
+      '^3[kuradb] pg-native load failed:^0',
+      err instanceof Error ? err.message : String(err)
+    );
   }
 }
 
