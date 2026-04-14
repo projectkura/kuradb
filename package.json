@@ -15,10 +15,8 @@
   "scripts": {
     "build": "bun run build:manifest && bun run build:server && bun run build:lib",
     "build:manifest": "bun run build.js",
-    "build:server": "bun build ./src/index.ts --outfile ./dist/server.js --target node --format cjs --external pg-native",
+    "build:server": "bun build ./src/index.ts --outfile ./dist/server.js --target node --format cjs",
     "build:lib": "tsc -p tsconfig.lib.json",
-    "build:native": "node scripts/package-native.js",
-    "release": "bun run build && bun run build:native",
     "check": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.lib.json --noEmit",
     "lint": "biome check biome.json build.js package.json tsconfig.json tsconfig.lib.json README.md src lib/KuraDB.ts lib/orm.ts",
     "format": "biome format --write biome.json build.js package.json tsconfig.json tsconfig.lib.json README.md src lib/KuraDB.ts lib/orm.ts"
@@ -27,9 +25,7 @@
     "pg": "^8.16.0",
     "pg-copy-streams": "^6.0.6"
   },
-  "optionalDependencies": {
-    "pg-native": "^3.5.1"
-  },
+
   "devDependencies": {
     "@biomejs/biome": "^2.4.7",
     "@citizenfx/server": "2.0.5132-1",

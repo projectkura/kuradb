@@ -25,19 +25,8 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Install system dependencies
-        run: sudo apt-get update && sudo apt-get install -y libpq-dev
-
       - name: Install package dependencies
         run: bun install --frozen-lockfile
-
-      - name: Verify pg-native compiled
-        run: |
-          if [ ! -f node_modules/libpq/build/Release/addon.node ]; then
-            echo "::error::addon.node not found — pg-native failed to compile"
-            exit 1
-          fi
-          echo "addon.node compiled successfully"
 
       - name: Bump package.json version
         run: |
@@ -57,23 +46,15 @@ jobs:
           default_author: github_actions
           message: 'chore: bump version to ${{ github.ref_name }}'
 
+      - name: Install zip
+        run: sudo apt install zip
+
       - name: Bundle files
         run: |
-          mkdir -p ./temp/kuradb/{dist,lib,node_modules}
+          mkdir -p ./temp/kuradb/{dist,lib}
           cp ./{LICENSE,README.md,fxmanifest.lua} ./temp/kuradb/ || true
           cp -r ./dist/* ./temp/kuradb/dist/ || true
           cp -r ./lib/* ./temp/kuradb/lib/ || true
-
-          # Copy pg-native and its runtime dependency tree
-          for pkg in pg-native libpq pg-types pg-int8 postgres-array postgres-bytea postgres-date postgres-interval; do
-            if [ -d "node_modules/$pkg" ]; then
-              cp -r "node_modules/$pkg" "./temp/kuradb/node_modules/$pkg"
-            fi
-          done
-
-          # Patch libpq to bypass the bindings module (FiveM sandbox blocks its fs walks)
-          sed -i "s|require('bindings')('addon.node')|require('./build/Release/addon.node')|" ./temp/kuradb/node_modules/libpq/index.js
-
           cd ./temp && zip -r ../kuradb.zip ./kuradb
 
       - name: Create release
