@@ -9,9 +9,11 @@ import { isMinimumVersion } from '../utils/versions';
 
 let PgNative: typeof pg.Client | undefined;
 
-try {
-  PgNative = require('pg-native');
-} catch {}
+if (process.platform !== 'win32') {
+  try {
+    PgNative = require('pg-native');
+  } catch {}
+}
 
 export let pool: pg.Pool | null = null;
 export let dbVersion = '';
@@ -57,6 +59,16 @@ export async function createConnectionPool() {
     console.log(
       `^5[PostgreSQL ${version}] ^2Database server connection established for kuradb (${driverLabel}).^0`
     );
+
+    if (!PgNative) {
+      if (process.platform === 'win32') {
+        console.log('^3[kuradb] pg-native is not supported on Windows, using pure JS driver.^0');
+      } else {
+        console.log(
+          '^3[kuradb] pg-native not available, using pure JS driver. Install libpq5 for better performance (apt install libpq5).^0'
+        );
+      }
+    }
   } catch (err) {
     console.error(`^1[kuradb] Unable to establish a database connection.^0`);
     console.error(maskConnectionString(config.connectionString));
