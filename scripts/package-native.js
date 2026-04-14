@@ -1,16 +1,15 @@
-const { cpSync, rmSync, mkdirSync, existsSync } = require('node:fs');
+const { cpSync, rmSync, mkdirSync, existsSync, readFileSync, writeFileSync } = require('node:fs');
 const { join } = require('node:path');
 
 const root = join(__dirname, '..');
 const releaseModules = join(root, 'release', 'node_modules');
 const srcModules = join(root, 'node_modules');
 
-// pg-native and its full runtime dependency tree
+// pg-native and its full runtime dependency tree (bindings/file-uri-to-path
+// not needed — libpq is patched to bypass the bindings module)
 const packages = [
   'pg-native',
   'libpq',
-  'bindings',
-  'file-uri-to-path',
   'pg-types',
   'pg-int8',
   'postgres-array',
@@ -44,6 +43,18 @@ for (const pkg of packages) {
   });
   copied++;
   console.log(`  copy: ${pkg}`);
+}
+
+// Patch libpq to bypass the bindings module (FiveM sandbox blocks its fs walks)
+const libpqIndex = join(releaseModules, 'libpq', 'index.js');
+if (existsSync(libpqIndex)) {
+  const content = readFileSync(libpqIndex, 'utf8');
+  const patched = content.replace(
+    "require('bindings')('addon.node')",
+    "require('./build/Release/addon.node')"
+  );
+  writeFileSync(libpqIndex, patched);
+  console.log('  patch: libpq/index.js (bypass bindings for FiveM sandbox)');
 }
 
 // Copy build artifacts into release

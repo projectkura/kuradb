@@ -49,6 +49,9 @@ jobs:
       - name: Package release
         run: bun run build:native
 
+      - name: Patch libpq for FiveM sandbox
+        run: sed -i "s|require('bindings')('addon.node')|require('./build/Release/addon.node')|" release/node_modules/libpq/index.js
+
       - name: Upload release artifact
         uses: actions/upload-artifact@v4
         with:

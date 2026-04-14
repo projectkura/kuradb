@@ -65,11 +65,14 @@ jobs:
           cp -r ./lib/* ./temp/kuradb/lib/ || true
 
           # Copy pg-native and its runtime dependency tree
-          for pkg in pg-native libpq bindings file-uri-to-path pg-types pg-int8 postgres-array postgres-bytea postgres-date postgres-interval; do
+          for pkg in pg-native libpq pg-types pg-int8 postgres-array postgres-bytea postgres-date postgres-interval; do
             if [ -d "node_modules/$pkg" ]; then
               cp -r "node_modules/$pkg" "./temp/kuradb/node_modules/$pkg"
             fi
           done
+
+          # Patch libpq to bypass the bindings module (FiveM sandbox blocks its fs walks)
+          sed -i "s|require('bindings')('addon.node')|require('./build/Release/addon.node')|" ./temp/kuradb/node_modules/libpq/index.js
 
           cd ./temp && zip -r ../kuradb.zip ./kuradb
 
