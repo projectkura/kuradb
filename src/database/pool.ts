@@ -43,9 +43,7 @@ export async function createConnectionPool() {
     dbVersion = version;
     pool = newPool;
 
-    console.log(
-      `^5[PostgreSQL ${version}] ^2Database server connection established for kuradb.^0`
-    );
+    console.log(`^5[PostgreSQL ${version}] ^2Database server connection established for kuradb.^0`);
   } catch (err) {
     console.error(`^1[kuradb] Unable to establish a database connection.^0`);
     console.error(maskConnectionString(config.connectionString));
