@@ -28,7 +28,7 @@ export interface TableDefinition<
 }
 
 export interface SchemaDefinition<
-  TTables extends Record<string, TableDefinition> = Record<string, TableDefinition>,
+  TTables extends Record<string, TableDefinition<any>> = Record<string, TableDefinition<any>>,
 > {
   name: string;
   tables: TTables;
@@ -63,7 +63,7 @@ export function defineTable<TColumns extends Record<string, ColumnDefinition>>(
   };
 }
 
-export function defineSchema<TTables extends Record<string, TableDefinition>>(
+export function defineSchema<TTables extends Record<string, TableDefinition<any>>>(
   name: string,
   tables: TTables
 ): SchemaDefinition<TTables> {

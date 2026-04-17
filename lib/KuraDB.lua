@@ -84,7 +84,17 @@ local function createQueryMethod(method, transaction)
   })
 end
 
-local KuraDB = setmetatable(KuraDB or {}, {
+-- ============================================================
+-- KuraDB root
+-- ============================================================
+
+local kuraDb = kuraDb or {}
+
+-- ============================================================
+-- KuraDB.raw — all raw SQL methods live here
+-- ============================================================
+
+kuraDb.raw = setmetatable({}, {
   __index = function(_, index)
     return function(...)
       return kuradb[index](nil, ...)
@@ -93,12 +103,25 @@ local KuraDB = setmetatable(KuraDB or {}, {
 })
 
 for _, method in pairs({
-  'query', 'single', 'scalar', 'insert', 'update', 'prepare', 'rawExecute'
+  'query', 'single', 'scalar', 'insert', 'update', 'prepare'
 }) do
-  KuraDB[method] = createQueryMethod(method, false)
+  kuraDb.raw[method] = createQueryMethod(method, false)
 end
 
-KuraDB.transaction = setmetatable({
+kuraDb.raw.execute = setmetatable({
+  method = 'rawExecute',
+  await = function(query, parameters)
+    query, parameters = safeQueryArgs(query, parameters, nil, false)
+    return awaitExport(kuradb.rawExecute, query, parameters)
+  end
+}, {
+  __call = function(self, query, parameters, cb)
+    query, parameters, cb = safeQueryArgs(query, parameters, cb, false)
+    return kuradb[self.method](nil, query, parameters, cb, resourceName, options.return_callback_errors)
+  end
+})
+
+kuraDb.raw.transaction = setmetatable({
   await = function(query, parameters, transactionOptions)
     query, parameters = safeQueryArgs(query, parameters, nil, true)
     return awaitExport(kuradb.transaction, query, parameters, transactionOptions)
@@ -110,7 +133,7 @@ KuraDB.transaction = setmetatable({
   end
 })
 
-KuraDB.batch = setmetatable({
+kuraDb.raw.batch = setmetatable({
   await = function(query, parameterSets, batchOptions)
     assert(type(query) == 'string', "First argument expected string")
     assert(type(parameterSets) == 'table', "Second argument expected table")
@@ -124,7 +147,7 @@ KuraDB.batch = setmetatable({
   end
 })
 
-KuraDB.insertMany = setmetatable({
+kuraDb.raw.insertMany = setmetatable({
   await = function(target, rows, insertOptions)
     assert(type(target) == 'string', "First argument expected string")
     assert(type(rows) == 'table', "Second argument expected table")
@@ -138,7 +161,7 @@ KuraDB.insertMany = setmetatable({
   end
 })
 
-KuraDB.notify = setmetatable({
+kuraDb.raw.notify = setmetatable({
   await = function(channel, payload)
     assert(type(channel) == 'string', "First argument expected string")
     return awaitExport(kuradb.notify, channel, payload)
@@ -150,7 +173,7 @@ KuraDB.notify = setmetatable({
   end
 })
 
-KuraDB.listen = setmetatable({
+kuraDb.raw.listen = setmetatable({
   await = function(channel, onNotify, listenOptions)
     assert(type(channel) == 'string', "First argument expected string")
     assert(type(onNotify) == 'function' or (type(onNotify) == 'table' and onNotify.__cfx_functionReference), "Second argument expected function")
@@ -164,7 +187,7 @@ KuraDB.listen = setmetatable({
   end
 })
 
-KuraDB.unlisten = setmetatable({
+kuraDb.raw.unlisten = setmetatable({
   await = function(subscriptionId)
     assert(type(subscriptionId) == 'number', "First argument expected number")
     return awaitExport(kuradb.unlisten, subscriptionId)
@@ -176,7 +199,7 @@ KuraDB.unlisten = setmetatable({
   end
 })
 
-KuraDB.copyFrom = setmetatable({
+kuraDb.raw.copyFrom = setmetatable({
   await = function(query, input, copyOptions)
     assert(type(query) == 'string', "First argument expected string")
     return awaitExport(kuradb.copyFrom, query, input, copyOptions)
@@ -188,7 +211,7 @@ KuraDB.copyFrom = setmetatable({
   end
 })
 
-KuraDB.copyTo = setmetatable({
+kuraDb.raw.copyTo = setmetatable({
   await = function(query, copyOptions)
     assert(type(query) == 'string', "First argument expected string")
     return awaitExport(kuradb.copyTo, query, copyOptions)
@@ -200,7 +223,11 @@ KuraDB.copyTo = setmetatable({
   end
 })
 
-function KuraDB.store(query, cb)
+-- ============================================================
+-- Top-level utilities (not raw SQL, stay on KuraDB directly)
+-- ============================================================
+
+function kuraDb.store(query, cb)
   assert(type(query) == 'string', 'The SQL query must be a string')
 
   local storeId = #queryStore + 1
@@ -219,7 +246,7 @@ local function onReady(cb)
   return cb and cb() or true
 end
 
-KuraDB.ready = setmetatable({
+kuraDb.ready = setmetatable({
   await = onReady
 }, {
   __call = function(_, cb)
@@ -229,8 +256,8 @@ KuraDB.ready = setmetatable({
   end,
 })
 
-function KuraDB.startTransaction(cb, transactionOptions)
+function kuraDb.transaction(cb, transactionOptions)
   return kuradb.startTransaction(nil, cb, transactionOptions, nil, resourceName, true)
 end
 
-_ENV.KuraDB = KuraDB
+_ENV.kuraDb = kuraDb

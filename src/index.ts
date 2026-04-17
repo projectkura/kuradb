@@ -26,6 +26,7 @@ import type {
 } from './types';
 import { sleep } from './utils/sleep';
 import './database';
+import './commands';
 
 const KuraDB = {} as Record<string, Function>;
 
@@ -229,3 +230,10 @@ for (const key in KuraDB) {
   global.exports(`${key}_async`, exportAsync(key));
   global.exports(`${key}Sync`, exportAsync(key));
 }
+
+// ORM exports
+import { db } from './queryBuilder';
+import { schema } from './schema';
+
+global.exports('db', () => db);
+global.exports('schema', () => schema);

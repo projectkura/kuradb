@@ -15,7 +15,8 @@
         "useArrowFunction": "off"
       },
       "suspicious": {
-        "noExplicitAny": "off"
+        "noExplicitAny": "off",
+        "noThenProperty": "off"
       }
     }
   },

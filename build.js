@@ -20,7 +20,11 @@ dependencies {
     '/server:12913',
 }
 
-server_script 'dist/server.js'
+server_scripts {
+    'dist/server.js',
+    'lib/init.lua',
+    'lib/version.lua',
+}
 
 convar_category 'KuraDB' {
     'Configuration',
