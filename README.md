@@ -1,4 +1,4 @@
-# KuraDB
+# kuradb
 
 A PostgreSQL wrapper and ORM foundation for FiveM (FXServer). Built as the database backbone for [Project Kura](https://kura.walteria.net).
 

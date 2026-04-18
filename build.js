@@ -21,12 +21,15 @@ dependencies {
 }
 
 server_scripts {
+    '@kura-lib/init.lua',
     'dist/server.js',
+    'lib/KuraDB.lua',
+    'lib/QueryBuilder.lua',
     'lib/init.lua',
     'lib/version.lua',
 }
 
-convar_category 'KuraDB' {
+convar_category 'kuradb' {
     'Configuration',
     {
         { 'Connection String', 'kuradb_connection_string', 'CV_STRING', 'postgres://root:password69@localhost:5432/fivem' },

@@ -67,7 +67,7 @@ export interface QueryLogEntry {
   at: number;
 }
 
-export interface KuraDbDebugState {
+export interface kuradb_debug_state {
   enabled: boolean | string[];
   slowQueryWarning: number;
   logSize: number;

@@ -2,9 +2,12 @@ local kuradb = exports.kuradb
 local resourceName = GetCurrentResourceName()
 local promise = promise
 local Await = Citizen.Await
+_ENV.kura = _ENV.kura or {}
+_ENV.kura.db = _ENV.kura.db or {}
+local db = _ENV.kura.db
 
 -- ============================================================
--- Operators — KuraDB.op.*
+-- Operators — kura.db.op.*
 -- ============================================================
 
 local op = {}
@@ -109,21 +112,7 @@ function op.not_(condition)
   return { type = 'not', condition = condition }
 end
 
-kuraDb.op = op
-
--- Convenience globals for non-keyword operators
-eq = op.eq
-ne = op.ne
-lt = op.lt
-lte = op.lte
-gt = op.gt
-gte = op.gte
-like = op.like
-ilike = op.ilike
-inArray = op.inArray
-notInArray = op.notInArray
-isNull = op.isNull
-isNotNull = op.isNotNull
+db.op = op
 
 -- ============================================================
 -- SQL Compiler
@@ -448,7 +437,7 @@ function DeleteBuilder:await()
 end
 
 -- ============================================================
--- db entry point — KuraDB.db.*
+-- Query builder entry point — kura.db.*
 -- ============================================================
 
 ---@param columns? string[]
@@ -499,9 +488,7 @@ local function dbDelete(tbl)
   }, DeleteBuilder)
 end
 
-kuraDb.db = {
-  select = dbSelect,
-  insert = dbInsert,
-  update = dbUpdate,
-  delete = dbDelete,
-}
+db.select = dbSelect
+db.insert = dbInsert
+db.update = dbUpdate
+db.delete = dbDelete

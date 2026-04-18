@@ -1,10 +1,10 @@
-import type { KuraDbDebugState, TransactionIsolationLevel } from './types';
+import type { kuradb_debug_state, TransactionIsolationLevel } from './types';
 
 export const KURADB_RESOURCE_NAME = 'kuradb';
 export const KURADB_MINIMUM_POSTGRES_VERSION = '17.0.0';
 
 export function getConnectionString() {
-  return GetConvar('kuradb_connection_string', '').trim();
+  return normalizeConnectionString(GetConvar('kuradb_connection_string', '').trim());
 }
 
 export let kuradbDebug: boolean | string[] = false;
@@ -26,7 +26,7 @@ export function setDebug() {
   kuradbLogSize = kuradbDebug ? 10000 : GetConvarInt('kuradb_log_size', 100);
 }
 
-export function getDebugState(): KuraDbDebugState {
+export function getDebugState(): kuradb_debug_state {
   return {
     enabled: kuradbDebug,
     slowQueryWarning: kuradbSlowQueryWarning,
@@ -93,6 +93,30 @@ export function assertConnectionString() {
 
   if (!url.pathname || url.pathname === '/') {
     throw new Error('kuradb_connection_string must include a database name.');
+  }
+}
+
+function normalizeConnectionString(connectionString: string) {
+  if (!connectionString) {
+    return connectionString;
+  }
+
+  try {
+    const url = new URL(connectionString);
+    const sslmode = url.searchParams.get('sslmode')?.toLowerCase();
+    const useLibpqCompat = url.searchParams.get('uselibpqcompat')?.toLowerCase() === 'true';
+
+    if (
+      !useLibpqCompat &&
+      (sslmode === 'prefer' || sslmode === 'require' || sslmode === 'verify-ca')
+    ) {
+      url.searchParams.set('sslmode', 'verify-full');
+      return url.toString();
+    }
+
+    return connectionString;
+  } catch {
+    return connectionString;
   }
 }
 

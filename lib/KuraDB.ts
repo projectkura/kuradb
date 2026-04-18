@@ -53,7 +53,7 @@ interface QueryResult extends Array<Row> {
   count?: number | null;
 }
 
-interface KuraDbClient {
+interface kuradb_client {
   store: (query: string) => number;
   ready: (callback: () => void) => void;
   query: <T = QueryResult | null>(
@@ -250,7 +250,7 @@ function execute(method: string, ...args: unknown[]) {
   }) as Promise<unknown>;
 }
 
-export const kuradb: KuraDbClient = {
+export const kuradb: kuradb_client = {
   store(query) {
     assert(typeof query === 'string', `Query expects a string, received ${typeof query}`);
     queryStore.push(query);

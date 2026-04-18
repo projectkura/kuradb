@@ -134,7 +134,7 @@ async function timed<T>(label: string, fn: () => PromiseLike<T> | Promise<T>): P
 
 async function handleBenchmark() {
   try {
-    console.log('^3=== KuraDB ORM Benchmark ===^0');
+    console.log('^3=== kuradb ORM Benchmark ===^0');
     console.log('');
 
     // 1. Setup: create table using raw SQL (DDL isn't part of the query builder)
@@ -152,13 +152,15 @@ async function handleBenchmark() {
     });
 
     // 2. INSERT — single row via query builder
-    const insertedId = await timed('Insert: single row', () =>
-      db
-        .insert(benchTable)
-        .values({ username: 'orm_user_1', identifier: 'orm_id_1' })
-        .returning(['id'])
+    const insertedId = Number(
+      await timed('Insert: single row', () =>
+        db
+          .insert(benchTable)
+          .values({ username: 'orm_user_1', identifier: 'orm_id_1' })
+          .returning(['id'])
+      )
     );
-    console.log(`    → inserted: ${JSON.stringify(insertedId)}`);
+    console.log(`    → inserted id: ${insertedId}`);
 
     // 3. INSERT — 100 rows via query builder (sequential)
     await timed('Insert: 100 rows (sequential builder)', async () => {
@@ -209,8 +211,8 @@ async function handleBenchmark() {
     await timed('Delete: bulk WHERE lt', () => db.delete(benchTable).where(lt('id', 20)));
 
     // 11. Verify remaining count
-    const remaining = await timed('Select: count remaining', () => db.select().from(benchTable));
-    console.log(`    → remaining: ${(remaining as unknown[]).length}`);
+    const remainingRows = await timed('Select: rows remaining', () => db.select().from(benchTable));
+    console.log(`    → remaining: ${(remainingRows as unknown[]).length}`);
 
     // 12. toSQL inspection (no execution)
     const { sql, parameters } = db

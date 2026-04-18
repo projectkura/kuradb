@@ -22,7 +22,7 @@ export function generateLuaTypes(schema: SchemaDefinition, outputPath: string): 
     lines.push('');
   }
 
-  lines.push('---@class KuraDBSchema');
+  lines.push('---@class kuradb_schema');
   for (const tableName of Object.keys(schema.tables)) {
     const className = `${pascalCase(tableName)}Row`;
     lines.push(`---@field ${tableName} ${className}[]`);
@@ -46,7 +46,9 @@ export function generateLuaTypes(schema: SchemaDefinition, outputPath: string): 
     lines.push('');
   }
 
-  lines.push('KuraDB.tables = schema');
+  lines.push('_ENV.kura = _ENV.kura or {}');
+  lines.push('_ENV.kura.db = _ENV.kura.db or {}');
+  lines.push('kura.db.tables = schema');
   lines.push('');
   lines.push('return schema');
 
