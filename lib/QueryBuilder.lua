@@ -113,6 +113,21 @@ function op.not_(condition)
 end
 
 db.op = op
+_ENV.op = op
+
+-- ============================================================
+-- Table resolver — accepts a string name or a table definition
+-- ============================================================
+
+local function resolveTable(tbl)
+  if type(tbl) == 'string' then
+    local resolved = db.tables and db.tables[tbl]
+    if resolved then return resolved end
+    return { schema = 'public', name = tbl }
+  end
+
+  return tbl
+end
 
 -- ============================================================
 -- SQL Compiler
@@ -223,6 +238,7 @@ local SelectBuilder = {}
 SelectBuilder.__index = SelectBuilder
 
 function SelectBuilder:from(tbl)
+  tbl = resolveTable(tbl)
   self._schema = tbl.schema
   self._table = tbl.name
   return self
@@ -454,9 +470,10 @@ local function dbSelect(columns)
   }, SelectBuilder)
 end
 
----@param tbl table Table definition from schema
+---@param tbl table|string Table definition or table name
 ---@return table InsertBuilder
 local function dbInsert(tbl)
+  tbl = resolveTable(tbl)
   return setmetatable({
     _schema = tbl.schema,
     _table = tbl.name,
@@ -465,9 +482,10 @@ local function dbInsert(tbl)
   }, InsertBuilder)
 end
 
----@param tbl table Table definition from schema
+---@param tbl table|string Table definition or table name
 ---@return table UpdateBuilder
 local function dbUpdate(tbl)
+  tbl = resolveTable(tbl)
   return setmetatable({
     _schema = tbl.schema,
     _table = tbl.name,
@@ -477,9 +495,10 @@ local function dbUpdate(tbl)
   }, UpdateBuilder)
 end
 
----@param tbl table Table definition from schema
+---@param tbl table|string Table definition or table name
 ---@return table DeleteBuilder
 local function dbDelete(tbl)
+  tbl = resolveTable(tbl)
   return setmetatable({
     _schema = tbl.schema,
     _table = tbl.name,
