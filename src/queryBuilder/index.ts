@@ -1,4 +1,4 @@
-export { Database, db } from './Database';
+export { Database, db, kura } from './Database';
 export { DeleteBuilder } from './DeleteBuilder';
 export { executeQuery } from './execute';
 export { InsertBuilder } from './InsertBuilder';

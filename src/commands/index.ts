@@ -7,13 +7,10 @@ import { executeQuery } from '../queryBuilder/execute';
 import { eq, lt } from '../queryBuilder/operators';
 import { schema } from '../schema';
 import {
-  addMigration,
-  clearMigrations,
-  generateCreateTableSQL,
   getAllMigrations,
+  createMigrationFromSchema,
   getPendingMigrations,
-  saveMigrationsToFile,
-  setCurrentVersion,
+  recordAppliedMigration,
 } from '../services/migrationService';
 import { generateLuaTypes } from '../services/typeGenerator';
 
@@ -26,7 +23,7 @@ RegisterCommand(
 
     switch (args[0]) {
       case 'generate':
-        void handleGenerate();
+        void handleGenerate(args.slice(1).join(' '));
         break;
       case 'migrate':
         void handleMigrate();
@@ -35,24 +32,24 @@ RegisterCommand(
         void handleBenchmark();
         break;
       default:
-        console.log('^3Usage: kuradb <generate|migrate|benchmark>^0');
+        console.log('^3Usage: kuradb <generate [name]|migrate|benchmark>^0');
     }
   },
   true
 );
 
-async function handleGenerate() {
+async function handleGenerate(customName?: string) {
   try {
     const basePath = GetResourcePath(KURADB_RESOURCE_NAME);
+    const result = createMigrationFromSchema(basePath, schema, customName);
 
-    clearMigrations();
-
-    for (const [tableName, table] of Object.entries(schema.tables)) {
-      addMigration(`Create ${tableName} table`, generateCreateTableSQL(table));
+    if (result.created && result.migration) {
+      console.log(`^2✓ Generated migration: ${result.migration.path}^0`);
+      console.log(`^2✓ Updated journal: ${result.journalPath}^0`);
+    } else {
+      console.log('^3No schema changes detected. No new migration created.^0');
+      console.log(`^2✓ Migration journal: ${result.journalPath}^0`);
     }
-
-    const sqlPath = saveMigrationsToFile(`${basePath}/migrations/pending.sql`);
-    console.log(`^2✓ Generated: ${sqlPath}^0`);
 
     const luaPath = `${basePath}/lib/schema.generated.lua`;
     generateLuaTypes(schema, luaPath);
@@ -61,7 +58,9 @@ async function handleGenerate() {
     updateSchemaRegistry(schema);
 
     console.log(`^2✓ Schema generated: ${Object.keys(schema.tables).length} tables ready^0`);
-    console.log('^3Run "kuradb migrate" to apply changes^0');
+    if (result.created) {
+      console.log('^3Run "kuradb migrate" to apply pending migration files^0');
+    }
   } catch (err) {
     console.log(`^1✗ Generation failed: ${err}^0`);
   }
@@ -69,21 +68,22 @@ async function handleGenerate() {
 
 async function handleMigrate() {
   try {
-    const pending = getPendingMigrations();
+    const basePath = GetResourcePath(KURADB_RESOURCE_NAME);
+    const pending = await getPendingMigrations(basePath);
 
     if (pending.length === 0) {
-      console.log('^3No pending migrations. Run "kuradb generate" first.^0');
+      console.log('^3No pending migrations. Run "kuradb generate" if you changed the schema.^0');
       return;
     }
 
-    console.log(`^3Applying ${pending.length} migration(s)...^0`);
+    console.log(`^3Applying ${pending.length} migration file(s)...^0`);
 
     for (const migration of pending) {
       try {
         await new Promise<void>((resolve, reject) => {
           void rawExecute(
             KURADB_RESOURCE_NAME,
-            migration.up,
+            migration.sql,
             undefined,
             (_result: unknown, err?: string) => {
               if (err) return reject(new Error(err));
@@ -93,15 +93,14 @@ async function handleMigrate() {
           );
         });
 
-        console.log(`^2✓ v${migration.version}: ${migration.description}^0`);
-        setCurrentVersion(migration.version);
+        await recordAppliedMigration(migration);
+        console.log(`^2✓ Applied ${migration.filename}^0`);
       } catch (err) {
-        console.log(`^1✗ v${migration.version} failed: ${err}^0`);
+        console.log(`^1✗ ${migration.filename} failed: ${err}^0`);
         throw err;
       }
     }
 
-    const basePath = GetResourcePath(KURADB_RESOURCE_NAME);
     generateLuaTypes(schema, `${basePath}/lib/schema.generated.lua`);
     console.log('^2✓ Updated Lua types^0');
 
@@ -115,7 +114,7 @@ async function handleMigrate() {
 
 function updateSchemaRegistry(schemaDef: SchemaDefinition) {
   global.exports('getSchema', () => schemaDef);
-  global.exports('getMigrations', () => getAllMigrations());
+  global.exports('getMigrations', () => getAllMigrations(GetResourcePath(KURADB_RESOURCE_NAME)));
 }
 
 const benchTable = defineTable('public', 'bench_orm', {

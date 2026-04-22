@@ -1,16 +1,56 @@
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import type { ColumnDefinition, ColumnKind, TableDefinition } from '../orm';
+import type { SchemaDefinition } from '../orm';
+import { executeQuery } from '../queryBuilder/execute';
 
-export interface Migration {
-  version: number;
-  description: string;
-  up: string;
-  down?: string;
+export interface MigrationJournalEntry {
+  idx: number;
+  when: number;
+  tag: string;
+  filename: string;
+  snapshot: string;
 }
 
-let migrations: Migration[] = [];
-let currentVersion = 0;
+export interface MigrationJournal {
+  version: '1';
+  dialect: 'postgresql';
+  entries: MigrationJournalEntry[];
+}
+
+export interface MigrationFile {
+  id: string;
+  idx: number;
+  tag: string;
+  filename: string;
+  path: string;
+  snapshotPath: string;
+  sql: string;
+  hash: string;
+  createdAt: number;
+}
+
+export interface GeneratedMigrationResult {
+  created: boolean;
+  journalPath: string;
+  migration?: MigrationFile;
+}
+
+const MIGRATIONS_TABLE_SQL = `
+CREATE TABLE IF NOT EXISTS "public"."__kuradb_migrations" (
+  "id" VARCHAR(255) PRIMARY KEY,
+  "tag" VARCHAR(255) NOT NULL,
+  "hash" VARCHAR(64) NOT NULL,
+  "applied_at" TIMESTAMPTZ NOT NULL DEFAULT NOW()
+)
+`.trim();
+
+const EMPTY_JOURNAL: MigrationJournal = {
+  version: '1',
+  dialect: 'postgresql',
+  entries: [],
+};
 
 export function generateCreateTableSQL(table: TableDefinition<any>): string {
   const columns: string[] = [];
@@ -32,49 +72,116 @@ export function generateDropTableSQL(table: TableDefinition<any>): string {
   return `DROP TABLE IF EXISTS "${table.schema}"."${table.name}";`;
 }
 
-export function addMigration(description: string, up: string, down?: string): void {
-  const version = migrations.length + 1;
-  migrations.push({ version, description, up, down });
+export async function ensureMigrationTable(): Promise<void> {
+  await executeQuery('query', MIGRATIONS_TABLE_SQL, []);
 }
 
-export function clearMigrations(): void {
-  migrations = [];
+export async function getAppliedMigrations(): Promise<Map<string, { hash: string }>> {
+  await ensureMigrationTable();
+
+  const rows = (await executeQuery(
+    'query',
+    'SELECT "id", "hash" FROM "public"."__kuradb_migrations" ORDER BY "applied_at" ASC',
+    []
+  )) as Array<{ id: string; hash: string }>;
+
+  return new Map(rows.map((row) => [row.id, { hash: row.hash }]));
 }
 
-export function getPendingMigrations(): Migration[] {
-  return migrations.filter((m) => m.version > currentVersion);
+export async function recordAppliedMigration(migration: MigrationFile): Promise<void> {
+  await ensureMigrationTable();
+  await executeQuery(
+    'query',
+    `
+      INSERT INTO "public"."__kuradb_migrations" ("id", "tag", "hash")
+      VALUES ($1, $2, $3)
+    `,
+    [migration.id, migration.tag, migration.hash]
+  );
 }
 
-export function getAllMigrations(): Migration[] {
-  return migrations;
-}
+export function createMigrationFromSchema(
+  basePath: string,
+  schema: SchemaDefinition,
+  customName?: string
+): GeneratedMigrationResult {
+  const journal = readMigrationJournal(basePath);
+  const migrationsDir = getMigrationsDirectory(basePath);
+  const metaDir = getMigrationMetaDirectory(basePath);
+  const journalPath = getMigrationJournalPath(basePath);
+  const snapshot = serializeSchemaSnapshot(schema);
+  const latestEntry = journal.entries.at(-1);
 
-export function setCurrentVersion(version: number): void {
-  currentVersion = version;
-}
-
-export function getCurrentVersion(): number {
-  return currentVersion;
-}
-
-export function saveMigrationsToFile(outputPath: string): string {
-  const pending = getPendingMigrations();
-
-  const migrationSQL = [
-    '-- Auto-generated migrations',
-    `-- Generated at: ${new Date().toISOString()}`,
-    `-- Apply migrations from version ${currentVersion + 1} onwards`,
-    '',
-    ...pending.map((m) => [`-- Migration v${m.version}: ${m.description}`, m.up, ''].join('\n')),
-  ].join('\n');
-
-  const dir = dirname(outputPath);
-  if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
+  if (latestEntry) {
+    const latestSnapshotPath = join(metaDir, latestEntry.snapshot);
+    if (existsSync(latestSnapshotPath) && readFileSync(latestSnapshotPath, 'utf8') === snapshot) {
+      return { created: false, journalPath };
+    }
+  } else if (Object.keys(schema.tables).length === 0) {
+    return { created: false, journalPath };
   }
 
-  writeFileSync(outputPath, migrationSQL);
-  return outputPath;
+  const idx = journal.entries.length;
+  const prefix = String(idx).padStart(4, '0');
+  const tag = slugify(customName || getDefaultMigrationTag(journal, schema));
+  const filename = `${prefix}_${tag}.sql`;
+  const snapshotFilename = `${prefix}_snapshot.json`;
+  const createdAt = Date.now();
+
+  const sql = [
+    '-- Auto-generated by kuradb',
+    `-- Tag: ${tag}`,
+    `-- Generated at: ${new Date(createdAt).toISOString()}`,
+    '',
+    buildSchemaMigrationSQL(schema),
+    '',
+  ].join('\n');
+
+  const migrationPath = join(migrationsDir, filename);
+  const snapshotPath = join(metaDir, snapshotFilename);
+
+  writeFileSync(migrationPath, sql);
+  writeFileSync(snapshotPath, snapshot);
+
+  const entry: MigrationJournalEntry = {
+    idx,
+    when: createdAt,
+    tag,
+    filename,
+    snapshot: snapshotFilename,
+  };
+
+  writeMigrationJournal(basePath, {
+    ...journal,
+    entries: [...journal.entries, entry],
+  });
+
+  return {
+    created: true,
+    journalPath,
+    migration: loadMigrationFromEntry(basePath, entry),
+  };
+}
+
+export function getAllMigrations(basePath: string): MigrationFile[] {
+  const journal = readMigrationJournal(basePath);
+  return journal.entries.map((entry) => loadMigrationFromEntry(basePath, entry));
+}
+
+export async function getPendingMigrations(basePath: string): Promise<MigrationFile[]> {
+  const migrations = getAllMigrations(basePath);
+  const applied = await getAppliedMigrations();
+
+  for (const migration of migrations) {
+    const appliedMigration = applied.get(migration.id);
+    if (appliedMigration && appliedMigration.hash !== migration.hash) {
+      throw new Error(
+        `Applied migration "${migration.filename}" was modified on disk. Restore it or create a new migration.`
+      );
+    }
+  }
+
+  return migrations.filter((migration) => !applied.has(migration.id));
 }
 
 function mapColumnTypeToSQL(kind: ColumnKind | string): string {
@@ -90,4 +197,135 @@ function mapColumnTypeToSQL(kind: ColumnKind | string): string {
   };
 
   return typeMap[kind] || 'TEXT';
+}
+
+function buildSchemaMigrationSQL(schema: SchemaDefinition): string {
+  return Object.entries(schema.tables)
+    .sort(([leftName], [rightName]) => leftName.localeCompare(rightName))
+    .map(([, table]) => generateCreateTableSQL(table))
+    .join('\n\n');
+}
+
+function getMigrationsDirectory(basePath: string): string {
+  const dir = join(basePath, 'migrations');
+  ensureDirectory(dir);
+  return dir;
+}
+
+function getMigrationMetaDirectory(basePath: string): string {
+  const dir = join(getMigrationsDirectory(basePath), 'meta');
+  ensureDirectory(dir);
+  return dir;
+}
+
+function getMigrationJournalPath(basePath: string): string {
+  return join(getMigrationMetaDirectory(basePath), '_journal.json');
+}
+
+function ensureDirectory(path: string) {
+  if (!existsSync(path)) {
+    mkdirSync(path, { recursive: true });
+  }
+}
+
+function readMigrationJournal(basePath: string): MigrationJournal {
+  const journalPath = getMigrationJournalPath(basePath);
+
+  if (!existsSync(journalPath)) {
+    writeMigrationJournal(basePath, EMPTY_JOURNAL);
+    return EMPTY_JOURNAL;
+  }
+
+  const journal = JSON.parse(readFileSync(journalPath, 'utf8')) as Partial<MigrationJournal>;
+  return {
+    version: journal.version === '1' ? journal.version : '1',
+    dialect: 'postgresql',
+    entries: Array.isArray(journal.entries) ? journal.entries : [],
+  };
+}
+
+function writeMigrationJournal(basePath: string, journal: MigrationJournal) {
+  writeFileSync(getMigrationJournalPath(basePath), `${JSON.stringify(journal, null, 2)}\n`);
+}
+
+function loadMigrationFromEntry(basePath: string, entry: MigrationJournalEntry): MigrationFile {
+  const migrationPath = join(getMigrationsDirectory(basePath), entry.filename);
+  if (!existsSync(migrationPath)) {
+    throw new Error(`Migration file is missing: ${migrationPath}`);
+  }
+
+  const sql = readFileSync(migrationPath, 'utf8');
+
+  return {
+    id: entry.filename.replace(/\.sql$/i, ''),
+    idx: entry.idx,
+    tag: entry.tag,
+    filename: entry.filename,
+    path: migrationPath,
+    snapshotPath: join(getMigrationMetaDirectory(basePath), entry.snapshot),
+    sql,
+    hash: createHash('sha256').update(sql).digest('hex'),
+    createdAt: entry.when,
+  };
+}
+
+function getDefaultMigrationTag(journal: MigrationJournal, schema: SchemaDefinition): string {
+  if (journal.entries.length === 0) {
+    const tableNames = Object.values(schema.tables)
+      .map((table) => table.name)
+      .sort();
+
+    if (tableNames.length === 0) return 'initial_schema';
+    if (tableNames.length <= 3) return `init_${tableNames.join('_')}`;
+    return 'initial_schema';
+  }
+
+  return 'schema_update';
+}
+
+function slugify(value: string): string {
+  const normalized = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+
+  return normalized || 'schema_update';
+}
+
+function serializeSchemaSnapshot(schema: SchemaDefinition): string {
+  const snapshot = {
+    version: 1,
+    schema: {
+      name: schema.name,
+      tables: Object.fromEntries(
+        Object.entries(schema.tables)
+          .sort(([leftName], [rightName]) => leftName.localeCompare(rightName))
+          .map(([tableKey, table]) => [
+            tableKey,
+            {
+              schema: table.schema,
+              name: table.name,
+              primaryKey: [...table.primaryKey],
+              columns: Object.fromEntries(
+                (Object.entries(table.columns) as [string, ColumnDefinition][])
+                  .sort(([leftName], [rightName]) => leftName.localeCompare(rightName))
+                  .map(([columnKey, column]) => [
+                    columnKey,
+                    {
+                      name: column.name,
+                      kind: column.kind,
+                      nullable: !!column.nullable,
+                      primaryKey: !!column.primaryKey,
+                      defaultExpression: column.defaultExpression ?? null,
+                    },
+                  ])
+              ),
+            },
+          ])
+      ),
+    },
+  };
+
+  return `${JSON.stringify(snapshot, null, 2)}\n`;
 }

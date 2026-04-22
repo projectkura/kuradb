@@ -18,7 +18,13 @@ export class SelectBuilder implements PromiseLike<unknown[]> {
     }
   }
 
-  from(table: TableDefinition<any>): this {
+  from(table: TableDefinition<any> | string): this {
+    if (typeof table === 'string') {
+      this._schema = 'public';
+      this._table = table;
+      return this;
+    }
+
     this._schema = table.schema;
     this._table = table.name;
     return this;
