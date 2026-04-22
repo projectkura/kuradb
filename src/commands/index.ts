@@ -7,8 +7,8 @@ import { executeQuery } from '../queryBuilder/execute';
 import { eq, lt } from '../queryBuilder/operators';
 import { schema } from '../schema';
 import {
-  getAllMigrations,
   createMigrationFromSchema,
+  getAllMigrations,
   getPendingMigrations,
   recordAppliedMigration,
 } from '../services/migrationService';

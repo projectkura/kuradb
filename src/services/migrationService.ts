@@ -1,8 +1,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { ColumnDefinition, ColumnKind, TableDefinition } from '../orm';
-import type { SchemaDefinition } from '../orm';
+import type { ColumnDefinition, ColumnKind, SchemaDefinition, TableDefinition } from '../orm';
 import { executeQuery } from '../queryBuilder/execute';
 
 export interface MigrationJournalEntry {

@@ -19,6 +19,7 @@
     "build:lib": "tsc -p tsconfig.lib.json",
     "check": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.lib.json --noEmit",
     "lint": "biome check biome.json build.js package.json tsconfig.json tsconfig.lib.json README.md src lib/KuraDB.ts lib/orm.ts",
+    "precommit": "bun run lint && bun run check",
     "format": "biome format --write biome.json build.js package.json tsconfig.json tsconfig.lib.json README.md src lib/KuraDB.ts lib/orm.ts"
   },
   "dependencies": {
