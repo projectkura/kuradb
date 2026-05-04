@@ -10,17 +10,21 @@
   "files": [
     "dist",
     "lib",
+    "cli.js",
     "fxmanifest.lua"
   ],
   "scripts": {
-    "build": "bun run build:manifest && bun run build:server && bun run build:lib",
+    "build": "bun run build:manifest && bun run build:server && bun run build:cli && bun run build:lib",
     "build:manifest": "bun run build.js",
     "build:server": "bun build ./src/index.ts --outfile ./dist/server.js --target node --format cjs",
+    "build:cli": "bun build ./src/cli.ts --outfile ./dist/cli.js --target node --format cjs",
     "build:lib": "tsc -p tsconfig.lib.json",
+    "generate": "bun ./cli.js generate",
+    "migrate": "bun ./cli.js migrate",
     "check": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.lib.json --noEmit",
-    "lint": "biome check biome.json build.js package.json tsconfig.json tsconfig.lib.json README.md src lib/KuraDB.ts lib/orm.ts",
+    "lint": "biome check biome.json build.js cli.js package.json tsconfig.json tsconfig.lib.json README.md src lib/KuraDB.ts lib/orm.ts",
     "precommit": "bun run lint && bun run check",
-    "format": "biome format --write biome.json build.js package.json tsconfig.json tsconfig.lib.json README.md src lib/KuraDB.ts lib/orm.ts"
+    "format": "biome format --write biome.json build.js cli.js package.json tsconfig.json tsconfig.lib.json README.md src lib/KuraDB.ts lib/orm.ts"
   },
   "dependencies": {
     "pg": "^8.16.0",

@@ -49,12 +49,20 @@ jobs:
       - name: Install zip
         run: sudo apt install zip
 
-      - name: Bundle files
+      - name: Prepare release bundle
         run: |
           mkdir -p ./temp/kuradb/{dist,lib}
-          cp ./{LICENSE,README.md,fxmanifest.lua} ./temp/kuradb/ || true
+          cp ./{LICENSE,README.md,cli.js,fxmanifest.lua,package.json} ./temp/kuradb/ || true
           cp -r ./dist/* ./temp/kuradb/dist/ || true
           cp -r ./lib/* ./temp/kuradb/lib/ || true
+
+      - name: Smoke test packaged CLI
+        run: |
+          cd ./temp/kuradb
+          node ./cli.js generate --types-only
+
+      - name: Bundle files
+        run: |
           cd ./temp && zip -r ../kuradb.zip ./kuradb
 
       - name: Create release

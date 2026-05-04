@@ -2,7 +2,6 @@ import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ColumnDefinition, ColumnKind, SchemaDefinition, TableDefinition } from '../orm';
-import { executeQuery } from '../queryBuilder/execute';
 
 export interface MigrationJournalEntry {
   idx: number;
@@ -36,6 +35,8 @@ export interface GeneratedMigrationResult {
   migration?: MigrationFile;
 }
 
+export type MigrationSqlExecutor = (sql: string, parameters: unknown[]) => Promise<unknown>;
+
 const MIGRATIONS_TABLE_SQL = `
 CREATE TABLE IF NOT EXISTS "public"."__kuradb_migrations" (
   "id" VARCHAR(255) PRIMARY KEY,
@@ -49,6 +50,12 @@ const EMPTY_JOURNAL: MigrationJournal = {
   version: '1',
   dialect: 'postgresql',
   entries: [],
+};
+
+const defaultMigrationSqlExecutor: MigrationSqlExecutor = (sql, parameters) => {
+  const { executeQuery } =
+    require('../queryBuilder/execute') as typeof import('../queryBuilder/execute');
+  return executeQuery('query', sql, parameters);
 };
 
 export function generateCreateTableSQL(table: TableDefinition<any>): string {
@@ -71,15 +78,18 @@ export function generateDropTableSQL(table: TableDefinition<any>): string {
   return `DROP TABLE IF EXISTS "${table.schema}"."${table.name}";`;
 }
 
-export async function ensureMigrationTable(): Promise<void> {
-  await executeQuery('query', MIGRATIONS_TABLE_SQL, []);
+export async function ensureMigrationTable(
+  sqlExecutor: MigrationSqlExecutor = defaultMigrationSqlExecutor
+): Promise<void> {
+  await sqlExecutor(MIGRATIONS_TABLE_SQL, []);
 }
 
-export async function getAppliedMigrations(): Promise<Map<string, { hash: string }>> {
-  await ensureMigrationTable();
+export async function getAppliedMigrations(
+  sqlExecutor: MigrationSqlExecutor = defaultMigrationSqlExecutor
+): Promise<Map<string, { hash: string }>> {
+  await ensureMigrationTable(sqlExecutor);
 
-  const rows = (await executeQuery(
-    'query',
+  const rows = (await sqlExecutor(
     'SELECT "id", "hash" FROM "public"."__kuradb_migrations" ORDER BY "applied_at" ASC',
     []
   )) as Array<{ id: string; hash: string }>;
@@ -87,10 +97,12 @@ export async function getAppliedMigrations(): Promise<Map<string, { hash: string
   return new Map(rows.map((row) => [row.id, { hash: row.hash }]));
 }
 
-export async function recordAppliedMigration(migration: MigrationFile): Promise<void> {
-  await ensureMigrationTable();
-  await executeQuery(
-    'query',
+export async function recordAppliedMigration(
+  migration: MigrationFile,
+  sqlExecutor: MigrationSqlExecutor = defaultMigrationSqlExecutor
+): Promise<void> {
+  await ensureMigrationTable(sqlExecutor);
+  await sqlExecutor(
     `
       INSERT INTO "public"."__kuradb_migrations" ("id", "tag", "hash")
       VALUES ($1, $2, $3)
@@ -167,9 +179,12 @@ export function getAllMigrations(basePath: string): MigrationFile[] {
   return journal.entries.map((entry) => loadMigrationFromEntry(basePath, entry));
 }
 
-export async function getPendingMigrations(basePath: string): Promise<MigrationFile[]> {
+export async function getPendingMigrations(
+  basePath: string,
+  sqlExecutor: MigrationSqlExecutor = defaultMigrationSqlExecutor
+): Promise<MigrationFile[]> {
   const migrations = getAllMigrations(basePath);
-  const applied = await getAppliedMigrations();
+  const applied = await getAppliedMigrations(sqlExecutor);
 
   for (const migration of migrations) {
     const appliedMigration = applied.get(migration.id);
