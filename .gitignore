@@ -3,5 +3,6 @@ dist
 lib/*.js
 lib/*.d.ts
 lib/*.map
+lib/schema.generated.lua
 *.tsbuildinfo
 fxmanifest.lua

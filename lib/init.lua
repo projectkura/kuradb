@@ -1,13 +1,4 @@
----@class kuradb
----@field select fun(columns?: string[]): table
----@field insert fun(tbl: table): table
----@field update fun(tbl: table): table
----@field delete fun(tbl: table): table
----@field transaction fun(cb: fun(query: function): boolean): boolean
----@field op table
----@field raw table
----@field store fun(query: string, cb?: function): integer
----@field ready table
+---@type kuradb
 local db <const> = kura and kura.db or nil
 
 if not db then

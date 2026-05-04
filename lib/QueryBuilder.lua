@@ -4,6 +4,7 @@ local promise = promise
 local Await = Citizen.Await
 _ENV.kura = _ENV.kura or {}
 _ENV.kura.db = _ENV.kura.db or {}
+---@type kuradb
 local db = _ENV.kura.db
 
 -- ============================================================
@@ -119,11 +120,24 @@ _ENV.op = op
 -- Table resolver — accepts a string name or a table definition
 -- ============================================================
 
+---@param columnMap? table<string, string>
+---@param columnName string
+---@return string
+local function resolveColumnName(columnMap, columnName)
+  if not columnMap then
+    return columnName
+  end
+
+  return columnMap[columnName] or columnName
+end
+
+---@param tbl KuraDBTable<any, any, any>|string
+---@return KuraDBResolvedTable
 local function resolveTable(tbl)
   if type(tbl) == 'string' then
     local resolved = db.tables and db.tables[tbl]
     if resolved then return resolved end
-    return { schema = 'public', name = tbl }
+    return { schema = 'public', name = tbl, columns = nil, primaryKey = {} }
   end
 
   return tbl
@@ -151,19 +165,23 @@ local function formatTable(schema, name)
   return quote(schema) .. '.' .. quote(name)
 end
 
-local function buildCondition(state, cond)
+---@param state table
+---@param cond table
+---@param columnMap? table<string, string>
+---@return string
+local function buildCondition(state, cond, columnMap)
   local t = cond.type
 
   if t == 'comparison' then
-    return quote(cond.column) .. ' ' .. cond.operator .. ' ' .. addParam(state, cond.value)
+    return quote(resolveColumnName(columnMap, cond.column)) .. ' ' .. cond.operator .. ' ' .. addParam(state, cond.value)
   end
 
   if t == 'like' then
-    return quote(cond.column) .. ' LIKE ' .. addParam(state, cond.value)
+    return quote(resolveColumnName(columnMap, cond.column)) .. ' LIKE ' .. addParam(state, cond.value)
   end
 
   if t == 'ilike' then
-    return quote(cond.column) .. ' ILIKE ' .. addParam(state, cond.value)
+    return quote(resolveColumnName(columnMap, cond.column)) .. ' ILIKE ' .. addParam(state, cond.value)
   end
 
   if t == 'in' then
@@ -171,7 +189,7 @@ local function buildCondition(state, cond)
     for _, v in ipairs(cond.value) do
       placeholders[#placeholders + 1] = addParam(state, v)
     end
-    return quote(cond.column) .. ' IN (' .. table.concat(placeholders, ', ') .. ')'
+    return quote(resolveColumnName(columnMap, cond.column)) .. ' IN (' .. table.concat(placeholders, ', ') .. ')'
   end
 
   if t == 'notIn' then
@@ -179,21 +197,21 @@ local function buildCondition(state, cond)
     for _, v in ipairs(cond.value) do
       placeholders[#placeholders + 1] = addParam(state, v)
     end
-    return quote(cond.column) .. ' NOT IN (' .. table.concat(placeholders, ', ') .. ')'
+    return quote(resolveColumnName(columnMap, cond.column)) .. ' NOT IN (' .. table.concat(placeholders, ', ') .. ')'
   end
 
   if t == 'isNull' then
-    return quote(cond.column) .. ' IS NULL'
+    return quote(resolveColumnName(columnMap, cond.column)) .. ' IS NULL'
   end
 
   if t == 'isNotNull' then
-    return quote(cond.column) .. ' IS NOT NULL'
+    return quote(resolveColumnName(columnMap, cond.column)) .. ' IS NOT NULL'
   end
 
   if t == 'and' then
     local parts = {}
     for _, c in ipairs(cond.conditions) do
-      parts[#parts + 1] = '(' .. buildCondition(state, c) .. ')'
+      parts[#parts + 1] = '(' .. buildCondition(state, c, columnMap) .. ')'
     end
     return table.concat(parts, ' AND ')
   end
@@ -201,13 +219,13 @@ local function buildCondition(state, cond)
   if t == 'or' then
     local parts = {}
     for _, c in ipairs(cond.conditions) do
-      parts[#parts + 1] = '(' .. buildCondition(state, c) .. ')'
+      parts[#parts + 1] = '(' .. buildCondition(state, c, columnMap) .. ')'
     end
     return table.concat(parts, ' OR ')
   end
 
   if t == 'not' then
-    return 'NOT (' .. buildCondition(state, cond.condition) .. ')'
+    return 'NOT (' .. buildCondition(state, cond.condition, columnMap) .. ')'
   end
 
   error('Unknown condition type: ' .. tostring(t))
@@ -237,10 +255,14 @@ end
 local SelectBuilder = {}
 SelectBuilder.__index = SelectBuilder
 
+---@generic TRow, TInsert, TUpdate
+---@param tbl KuraDBTable<TRow, TInsert, TUpdate>|string
+---@return KuraSelectBuilder<TRow>
 function SelectBuilder:from(tbl)
   tbl = resolveTable(tbl)
   self._schema = tbl.schema
   self._table = tbl.name
+  self._columnsMap = tbl.columns
   return self
 end
 
@@ -271,7 +293,7 @@ function SelectBuilder:toSQL()
   if self._columns and #self._columns > 0 then
     local cols = {}
     for _, c in ipairs(self._columns) do
-      cols[#cols + 1] = quote(c)
+      cols[#cols + 1] = quote(resolveColumnName(self._columnsMap, c))
     end
     parts[#parts + 1] = 'SELECT ' .. table.concat(cols, ', ')
   else
@@ -281,13 +303,13 @@ function SelectBuilder:toSQL()
   parts[#parts + 1] = 'FROM ' .. formatTable(self._schema, self._table)
 
   if self._where then
-    parts[#parts + 1] = 'WHERE ' .. buildCondition(state, self._where)
+    parts[#parts + 1] = 'WHERE ' .. buildCondition(state, self._where, self._columnsMap)
   end
 
   if self._orderBy then
     local orders = {}
     for col, dir in pairs(self._orderBy) do
-      orders[#orders + 1] = quote(col) .. ' ' .. string.upper(dir)
+      orders[#orders + 1] = quote(resolveColumnName(self._columnsMap, col)) .. ' ' .. string.upper(dir)
     end
     if #orders > 0 then
       parts[#parts + 1] = 'ORDER BY ' .. table.concat(orders, ', ')
@@ -317,6 +339,9 @@ end
 local InsertBuilder = {}
 InsertBuilder.__index = InsertBuilder
 
+---@generic TInsert
+---@param values TInsert
+---@return KuraInsertBuilder<TInsert>
 function InsertBuilder:values(values)
   self._values = values
   return self
@@ -333,7 +358,7 @@ function InsertBuilder:toSQL()
   local cols = {}
   local vals = {}
   for col, val in pairs(self._values) do
-    cols[#cols + 1] = quote(col)
+    cols[#cols + 1] = quote(resolveColumnName(self._columnsMap, col))
     vals[#vals + 1] = addParam(state, val)
   end
 
@@ -344,7 +369,7 @@ function InsertBuilder:toSQL()
   if self._returning then
     local ret = {}
     for _, c in ipairs(self._returning) do
-      ret[#ret + 1] = c == '*' and '*' or quote(c)
+      ret[#ret + 1] = c == '*' and '*' or quote(resolveColumnName(self._columnsMap, c))
     end
     sql = sql .. ' RETURNING ' .. table.concat(ret, ', ')
   end
@@ -364,6 +389,9 @@ end
 local UpdateBuilder = {}
 UpdateBuilder.__index = UpdateBuilder
 
+---@generic TUpdate
+---@param values TUpdate
+---@return KuraUpdateBuilder<TUpdate>
 function UpdateBuilder:set(values)
   self._set = values
   return self
@@ -384,20 +412,20 @@ function UpdateBuilder:toSQL()
 
   local sets = {}
   for col, val in pairs(self._set) do
-    sets[#sets + 1] = quote(col) .. ' = ' .. addParam(state, val)
+    sets[#sets + 1] = quote(resolveColumnName(self._columnsMap, col)) .. ' = ' .. addParam(state, val)
   end
 
   local sql = 'UPDATE ' .. formatTable(self._schema, self._table) ..
     ' SET ' .. table.concat(sets, ', ')
 
   if self._where then
-    sql = sql .. ' WHERE ' .. buildCondition(state, self._where)
+    sql = sql .. ' WHERE ' .. buildCondition(state, self._where, self._columnsMap)
   end
 
   if self._returning then
     local ret = {}
     for _, c in ipairs(self._returning) do
-      ret[#ret + 1] = c == '*' and '*' or quote(c)
+      ret[#ret + 1] = c == '*' and '*' or quote(resolveColumnName(self._columnsMap, c))
     end
     sql = sql .. ' RETURNING ' .. table.concat(ret, ', ')
   end
@@ -433,13 +461,13 @@ function DeleteBuilder:toSQL()
   local sql = 'DELETE FROM ' .. formatTable(self._schema, self._table)
 
   if self._where then
-    sql = sql .. ' WHERE ' .. buildCondition(state, self._where)
+    sql = sql .. ' WHERE ' .. buildCondition(state, self._where, self._columnsMap)
   end
 
   if self._returning then
     local ret = {}
     for _, c in ipairs(self._returning) do
-      ret[#ret + 1] = c == '*' and '*' or quote(c)
+      ret[#ret + 1] = c == '*' and '*' or quote(resolveColumnName(self._columnsMap, c))
     end
     sql = sql .. ' RETURNING ' .. table.concat(ret, ', ')
   end
@@ -457,12 +485,13 @@ end
 -- ============================================================
 
 ---@param columns? string[]
----@return table SelectBuilder
+---@return KuraSelectBuilder<table>
 local function dbSelect(columns)
   return setmetatable({
     _columns = columns,
     _schema = nil,
     _table = nil,
+    _columnsMap = nil,
     _where = nil,
     _orderBy = nil,
     _limit = nil,
@@ -470,38 +499,47 @@ local function dbSelect(columns)
   }, SelectBuilder)
 end
 
----@param tbl table|string Table definition or table name
----@return table InsertBuilder
+---@overload fun(tbl: string): KuraInsertBuilder<table>
+---@generic TRow, TInsert, TUpdate
+---@param tbl KuraDBTable<TRow, TInsert, TUpdate> Table definition or table name
+---@return KuraInsertBuilder<TInsert>
 local function dbInsert(tbl)
   tbl = resolveTable(tbl)
   return setmetatable({
     _schema = tbl.schema,
     _table = tbl.name,
+    _columnsMap = tbl.columns,
     _values = nil,
     _returning = nil,
   }, InsertBuilder)
 end
 
----@param tbl table|string Table definition or table name
----@return table UpdateBuilder
+---@overload fun(tbl: string): KuraUpdateBuilder<table>
+---@generic TRow, TInsert, TUpdate
+---@param tbl KuraDBTable<TRow, TInsert, TUpdate> Table definition or table name
+---@return KuraUpdateBuilder<TUpdate>
 local function dbUpdate(tbl)
   tbl = resolveTable(tbl)
   return setmetatable({
     _schema = tbl.schema,
     _table = tbl.name,
+    _columnsMap = tbl.columns,
     _set = nil,
     _where = nil,
     _returning = nil,
   }, UpdateBuilder)
 end
 
----@param tbl table|string Table definition or table name
----@return table DeleteBuilder
+---@overload fun(tbl: string): KuraDeleteBuilder
+---@generic TRow, TInsert, TUpdate
+---@param tbl KuraDBTable<TRow, TInsert, TUpdate> Table definition or table name
+---@return KuraDeleteBuilder
 local function dbDelete(tbl)
   tbl = resolveTable(tbl)
   return setmetatable({
     _schema = tbl.schema,
     _table = tbl.name,
+    _columnsMap = tbl.columns,
     _where = nil,
     _returning = nil,
   }, DeleteBuilder)

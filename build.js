@@ -23,6 +23,7 @@ dependencies {
 server_scripts {
     '@kura-lib/init.lua',
     'dist/server.js',
+    'lib/schema.generated.lua',
     'lib/KuraDB.lua',
     'lib/QueryBuilder.lua',
     'lib/init.lua',

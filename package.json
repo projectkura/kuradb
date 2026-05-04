@@ -15,6 +15,7 @@
   ],
   "scripts": {
     "build": "bun run build:manifest && bun run build:server && bun run build:cli && bun run build:lib",
+    "build:types": "bun ./cli.js generate --types-only",
     "build:manifest": "bun run build.js",
     "build:server": "bun build ./src/index.ts --outfile ./dist/server.js --target node --format cjs",
     "build:cli": "bun build ./src/cli.ts --outfile ./dist/cli.js --target node --format cjs",
