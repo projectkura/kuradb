@@ -1,13 +1,25 @@
 ---@meta
 
 ---@alias KuraDBOrderDirection 'asc'|'desc'
+---@alias KuraDBColumnInput string|KuraDBColumnRef<any>
 
 ---@class KuraDBCondition
+
+---@generic TValue
+---@class KuraDBColumnRef<TValue>
+---@field schema string
+---@field table string
+---@field luaName string
+---@field sqlName string
+---@field kind string
+---@field nullable boolean
 
 ---@class KuraDBResolvedTable
 ---@field schema string
 ---@field name string
 ---@field columns table<string, string>?
+---@field columnOrder string[]?
+---@field columnRefs table<string, KuraDBColumnRef<any>>?
 ---@field primaryKey string[]
 
 ---@class KuraDBTable<TRow, TInsert, TUpdate> : KuraDBResolvedTable
@@ -40,21 +52,31 @@
 ---@field copyTo { await: fun(query: string, copyOptions?: table): string }
 
 ---@class KuraDBOperators
----@field eq fun(column: string, value: any): KuraDBCondition
----@field ne fun(column: string, value: any): KuraDBCondition
----@field lt fun(column: string, value: any): KuraDBCondition
----@field lte fun(column: string, value: any): KuraDBCondition
----@field gt fun(column: string, value: any): KuraDBCondition
----@field gte fun(column: string, value: any): KuraDBCondition
----@field like fun(column: string, pattern: string): KuraDBCondition
----@field ilike fun(column: string, pattern: string): KuraDBCondition
----@field inArray fun(column: string, values: any[]): KuraDBCondition
----@field notInArray fun(column: string, values: any[]): KuraDBCondition
----@field isNull fun(column: string): KuraDBCondition
----@field isNotNull fun(column: string): KuraDBCondition
+---@field eq fun(column: KuraDBColumnInput, value: any): KuraDBCondition
+---@field ne fun(column: KuraDBColumnInput, value: any): KuraDBCondition
+---@field lt fun(column: KuraDBColumnInput, value: any): KuraDBCondition
+---@field lte fun(column: KuraDBColumnInput, value: any): KuraDBCondition
+---@field gt fun(column: KuraDBColumnInput, value: any): KuraDBCondition
+---@field gte fun(column: KuraDBColumnInput, value: any): KuraDBCondition
+---@field like fun(column: KuraDBColumnInput, pattern: string): KuraDBCondition
+---@field ilike fun(column: KuraDBColumnInput, pattern: string): KuraDBCondition
+---@field inArray fun(column: KuraDBColumnInput, values: any[]): KuraDBCondition
+---@field notInArray fun(column: KuraDBColumnInput, values: any[]): KuraDBCondition
+---@field isNull fun(column: KuraDBColumnInput): KuraDBCondition
+---@field isNotNull fun(column: KuraDBColumnInput): KuraDBCondition
 ---@field and_ fun(...: KuraDBCondition): KuraDBCondition
 ---@field or_ fun(...: KuraDBCondition): KuraDBCondition
 ---@field not_ fun(condition: KuraDBCondition): KuraDBCondition
+
+---@class KuraDBTransactionContext
+---@field select fun(columns?: KuraDBColumnInput[]): KuraSelectBuilder<table>
+---@field insert fun(tbl: KuraDBTable<any, any, any>|string): KuraInsertBuilder<table>
+---@field update fun(tbl: KuraDBTable<any, any, any>|string): KuraUpdateBuilder<table>
+---@field delete fun(tbl: KuraDBTable<any, any, any>|string): KuraDeleteBuilder
+
+---@class KuraDBTransactionCallable
+---@field await fun(cb: fun(query: function, tx: KuraDBTransactionContext): boolean|nil, transactionOptions?: table): boolean
+---@operator call: fun(cb: fun(query: function, tx: KuraDBTransactionContext): boolean|nil, transactionOptions?: table): boolean
 
 ---@class KuraSelectBuilder<TRow>
 local KuraSelectBuilder = {}
@@ -68,7 +90,7 @@ function KuraSelectBuilder:from(tbl) end
 ---@return self
 function KuraSelectBuilder:where(condition) end
 
----@param orders table<string, KuraDBOrderDirection>
+---@param orders table<any, KuraDBOrderDirection>
 ---@return self
 function KuraSelectBuilder:orderBy(orders) end
 
@@ -83,6 +105,21 @@ function KuraSelectBuilder:offset(n) end
 ---@return { sql: string, parameters: unknown[] }
 function KuraSelectBuilder:toSQL() end
 
+---@return self
+function KuraSelectBuilder:first() end
+
+---@return self
+function KuraSelectBuilder:maybeSingle() end
+
+---@return self
+function KuraSelectBuilder:single() end
+
+---@return self
+function KuraSelectBuilder:exists() end
+
+---@return self
+function KuraSelectBuilder:forUpdate() end
+
 ---@return TRow[]
 function KuraSelectBuilder:await() end
 
@@ -93,9 +130,21 @@ local KuraInsertBuilder = {}
 ---@return self
 function KuraInsertBuilder:values(values) end
 
----@param columns? string[]
+---@param columns? KuraDBColumnInput[]
 ---@return self
 function KuraInsertBuilder:returning(columns) end
+
+---@param columns? KuraDBColumnInput[]
+---@return self
+function KuraInsertBuilder:returningRows(columns) end
+
+---@param columns? KuraDBColumnInput[]
+---@return self
+function KuraInsertBuilder:returningOne(columns) end
+
+---@param column KuraDBColumnInput
+---@return self
+function KuraInsertBuilder:returningValue(column) end
 
 ---@return { sql: string, parameters: unknown[] }
 function KuraInsertBuilder:toSQL() end
@@ -114,9 +163,21 @@ function KuraUpdateBuilder:set(values) end
 ---@return self
 function KuraUpdateBuilder:where(condition) end
 
----@param columns? string[]
+---@param columns? KuraDBColumnInput[]
 ---@return self
 function KuraUpdateBuilder:returning(columns) end
+
+---@param columns? KuraDBColumnInput[]
+---@return self
+function KuraUpdateBuilder:returningRows(columns) end
+
+---@param columns? KuraDBColumnInput[]
+---@return self
+function KuraUpdateBuilder:returningOne(columns) end
+
+---@param column KuraDBColumnInput
+---@return self
+function KuraUpdateBuilder:returningValue(column) end
 
 ---@return { sql: string, parameters: unknown[] }
 function KuraUpdateBuilder:toSQL() end
@@ -131,9 +192,21 @@ local KuraDeleteBuilder = {}
 ---@return self
 function KuraDeleteBuilder:where(condition) end
 
----@param columns? string[]
+---@param columns? KuraDBColumnInput[]
 ---@return self
 function KuraDeleteBuilder:returning(columns) end
+
+---@param columns? KuraDBColumnInput[]
+---@return self
+function KuraDeleteBuilder:returningRows(columns) end
+
+---@param columns? KuraDBColumnInput[]
+---@return self
+function KuraDeleteBuilder:returningOne(columns) end
+
+---@param column KuraDBColumnInput
+---@return self
+function KuraDeleteBuilder:returningValue(column) end
 
 ---@return { sql: string, parameters: unknown[] }
 function KuraDeleteBuilder:toSQL() end
@@ -145,12 +218,13 @@ function KuraDeleteBuilder:await() end
 ---@field raw KuraDBRawNamespace
 ---@field op KuraDBOperators
 ---@field tables kuradb_schema
+---@field transaction KuraDBTransactionCallable
 ---@field store fun(query: string, cb?: function): integer
 ---@field ready KuraDBReady
 
 local kuradb = {}
 
----@param columns? string[]
+---@param columns? KuraDBColumnInput[]
 ---@return KuraSelectBuilder<table>
 function kuradb.select(columns) end
 
@@ -165,11 +239,6 @@ function kuradb.insert(tbl) end
 ---@param tbl KuraDBTable<TRow, TInsert, TUpdate>
 ---@return KuraUpdateBuilder<TUpdate>
 function kuradb.update(tbl) end
-
----@param cb fun(query: function): boolean
----@param transactionOptions? table
----@return boolean
-function kuradb.transaction(cb, transactionOptions) end
 
 ---@overload fun(tbl: string): KuraDeleteBuilder
 ---@generic TRow, TInsert, TUpdate

@@ -12,14 +12,25 @@ export function generateLuaTypes(schema: SchemaDefinition, outputPath: string): 
     const rowClassName = `${pascalCase(tableName)}Row`;
     const insertClassName = `${pascalCase(tableName)}Insert`;
     const updateClassName = `${pascalCase(tableName)}Update`;
+    const columnsClassName = `${pascalCase(tableName)}Columns`;
     const tableClassName = `${pascalCase(tableName)}Table`;
 
     emitRowClass(lines, rowClassName, table.columns);
     emitInsertClass(lines, insertClassName, table.columns);
     emitUpdateClass(lines, updateClassName, table.columns);
+    emitColumnsClass(lines, columnsClassName, table.columns);
     lines.push(
       `---@class ${tableClassName} : KuraDBTable<${rowClassName}, ${insertClassName}, ${updateClassName}>`
     );
+    lines.push(`---@field columns table<string, string>`);
+    lines.push(`---@field columnOrder string[]`);
+    lines.push(`---@field columnRefs ${columnsClassName}`);
+    for (const [propertyName, column] of Object.entries(
+      table.columns as Record<string, ColumnDefinition>
+    )) {
+      if (isReservedTableField(propertyName)) continue;
+      lines.push(`---@field ${propertyName} ${columnRefType(column)}`);
+    }
     lines.push('');
   }
 
@@ -39,6 +50,23 @@ export function generateLuaTypes(schema: SchemaDefinition, outputPath: string): 
     const columnMapEntries = Object.entries(table.columns as Record<string, ColumnDefinition>)
       .map(([propertyName, col]) => `    ${propertyName} = '${col.name}',`)
       .join('\n');
+    const columnOrderEntries = Object.keys(table.columns)
+      .map((propertyName) => `    '${propertyName}',`)
+      .join('\n');
+    const columnRefEntries = Object.entries(table.columns as Record<string, ColumnDefinition>)
+      .map(([propertyName, col]) =>
+        [
+          `    ${propertyName} = {`,
+          `      schema = '${table.schema}',`,
+          `      table = '${table.name}',`,
+          `      luaName = '${propertyName}',`,
+          `      sqlName = '${col.name}',`,
+          `      kind = '${col.kind}',`,
+          `      nullable = ${luaBoolean(Boolean(col.nullable))},`,
+          '    },',
+        ].join('\n')
+      )
+      .join('\n');
     const primaryKeyEntries = table.primaryKey.map((colName) => `'${colName}'`).join(', ');
 
     lines.push(`---@type ${tableClassName}`);
@@ -48,8 +76,23 @@ export function generateLuaTypes(schema: SchemaDefinition, outputPath: string): 
     lines.push('  columns = {');
     lines.push(columnMapEntries);
     lines.push('  },');
+    lines.push('  columnOrder = {');
+    lines.push(columnOrderEntries);
+    lines.push('  },');
+    lines.push('  columnRefs = {');
+    lines.push(columnRefEntries);
+    lines.push('  },');
     lines.push(`  primaryKey = { ${primaryKeyEntries} },`);
     lines.push('}');
+    lines.push('');
+    for (const [propertyName] of Object.entries(
+      table.columns as Record<string, ColumnDefinition>
+    )) {
+      if (isReservedTableField(propertyName)) continue;
+      lines.push(
+        `schema.${tableName}.${propertyName} = schema.${tableName}.columnRefs.${propertyName}`
+      );
+    }
     lines.push('');
   }
 
@@ -125,6 +168,39 @@ function emitUpdateClass(
   lines.push('');
 }
 
+function emitColumnsClass(
+  lines: string[],
+  className: string,
+  columns: Record<string, ColumnDefinition>
+): void {
+  lines.push(`---@class ${className}`);
+  for (const [propertyName, column] of Object.entries(columns)) {
+    lines.push(`---@field ${propertyName} ${columnRefType(column)}`);
+  }
+  lines.push('');
+}
+
 function isOptionalInsertField(column: ColumnDefinition): boolean {
   return Boolean(column.nullable || column.defaultExpression);
 }
+
+function columnRefType(column: ColumnDefinition): string {
+  return `KuraDBColumnRef<${mapColumnTypeToLua(column.kind)}>`;
+}
+
+function luaBoolean(value: boolean): string {
+  return value ? 'true' : 'false';
+}
+
+function isReservedTableField(fieldName: string): boolean {
+  return RESERVED_TABLE_FIELDS.has(fieldName);
+}
+
+const RESERVED_TABLE_FIELDS = new Set([
+  'schema',
+  'name',
+  'columns',
+  'columnOrder',
+  'columnRefs',
+  'primaryKey',
+]);

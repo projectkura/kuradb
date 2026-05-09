@@ -11,6 +11,10 @@ local type = type
 local queryStore = {}
 local kuradb = exports.kuradb
 
+_ENV.kura = _ENV.kura or {}
+_ENV.kura.db = _ENV.kura.db or {}
+local db = _ENV.kura.db
+
 local function awaitExport(fn, ...)
   local p = promise.new()
   local args = { ... }
@@ -84,13 +88,62 @@ local function createQueryMethod(method, transaction)
   })
 end
 
--- ============================================================
--- kura.db root
--- ============================================================
+---@param result table|nil
+---@return any
+local function parseInsertResult(result)
+  local firstRow = result and result[1]
+  if not firstRow then
+    return nil
+  end
 
-_ENV.kura = _ENV.kura or {}
-_ENV.kura.db = _ENV.kura.db or {}
-local db = _ENV.kura.db
+  if firstRow.id ~= nil then
+    return firstRow.id
+  end
+
+  local values = {}
+  for _, value in pairs(firstRow) do
+    values[#values + 1] = value
+  end
+
+  return values[1]
+end
+
+---@param method string
+---@param result table|nil
+---@return any
+local function parseTransactionBuilderResult(method, result)
+  if method == 'query' then
+    return result or {}
+  end
+
+  if method == 'insert' then
+    return parseInsertResult(result)
+  end
+
+  if method == 'update' then
+    if not result then
+      return 0
+    end
+
+    return result.count or #result or 0
+  end
+
+  return result
+end
+
+local function wrapTransactionCallback(cb)
+  assert(type(cb) == 'function', "First argument expected function")
+
+  return function(query)
+    local executor = function(method, statement, values)
+      local result = query(statement, values)
+      return parseTransactionBuilderResult(method, result)
+    end
+
+    local tx = db._createTransactionContext and db._createTransactionContext(executor) or nil
+    return cb(query, tx)
+  end
+end
 
 -- ============================================================
 -- kura.db.raw — all raw SQL methods live here
@@ -258,6 +311,19 @@ db.ready = setmetatable({
   end,
 })
 
-function db.transaction(cb, transactionOptions)
-  return kuradb.startTransaction(nil, cb, transactionOptions, nil, resourceName, true)
-end
+db.transaction = setmetatable({
+  await = function(cb, transactionOptions)
+    return awaitExport(kuradb.startTransaction, wrapTransactionCallback(cb), transactionOptions)
+  end
+}, {
+  __call = function(_, cb, transactionOptions)
+    return kuradb.startTransaction(
+      nil,
+      wrapTransactionCallback(cb),
+      transactionOptions,
+      nil,
+      resourceName,
+      true
+    )
+  end,
+})

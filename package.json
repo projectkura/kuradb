@@ -31,13 +31,13 @@
     "pg": "^8.16.0",
     "pg-copy-streams": "^6.0.6"
   },
-
   "devDependencies": {
     "@biomejs/biome": "^2.4.7",
     "@citizenfx/server": "2.0.5132-1",
     "@types/node": "^25.5.0",
     "@types/pg": "^8.15.4",
     "@types/pg-copy-streams": "^1.2.5",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "wasmoon": "^1.16.0"
   }
 }
