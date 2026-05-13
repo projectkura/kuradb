@@ -17,13 +17,15 @@ A PostgreSQL wrapper and ORM foundation for FiveM (FXServer). Built as the datab
 
 1. Download the latest release from the [Releases](../../releases) page.
 2. Extract into your `resources` folder.
-3. Add to your `server.cfg`:
+3. Edit `schema.ts` with your tables.
+4. Run `bun ./cli.js generate` and then `bun ./cli.js migrate`.
+5. Add to your `server.cfg`:
 
 ```
 ensure kuradb
 ```
 
-4. Set your connection string in `config.cfg` or via convar:
+6. Set your connection string in `config.cfg` or via convar:
 
 ```
 set kuradb_connection_string "postgresql://user:password@localhost:5432/dbname"
@@ -39,6 +41,12 @@ Requires [Bun](https://bun.sh).
 bun install
 bun run build
 ```
+
+## Schema Workflow
+
+- `schema.ts` is the file you edit.
+- `lib/schema.generated.lua` is generated output. Do not edit or ship it manually.
+- Run `kuradb generate`, `kuradb migrate`, or `generate --types-only` to recreate it.
 
 ---
 

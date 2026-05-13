@@ -1,3 +1,4 @@
+import { KURADB_RESOURCE_NAME } from './config';
 import {
   pool,
   rawBatch,
@@ -27,6 +28,8 @@ import type {
 import { sleep } from './utils/sleep';
 import './database';
 import './commands';
+import { db } from './queryBuilder';
+import { loadSchema } from './services/schemaLoader';
 
 const kuradbExports = {} as Record<string, Function>;
 
@@ -231,9 +234,5 @@ for (const key in kuradbExports) {
   global.exports(`${key}Sync`, exportAsync(key));
 }
 
-// ORM exports
-import { db } from './queryBuilder';
-import { schema } from './schema';
-
 global.exports('db', () => db);
-global.exports('schema', () => schema);
+global.exports('schema', () => loadSchema(GetResourcePath(KURADB_RESOURCE_NAME)));

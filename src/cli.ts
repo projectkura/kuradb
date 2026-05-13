@@ -1,12 +1,12 @@
 import pg from 'pg';
 import { parseGenerateCommandArgs } from './commandParsing';
-import { schema } from './schema';
 import {
   applyPendingMigrations,
   generateMigrationArtifacts,
   generateSchemaTypes,
   type MigrationSqlExecutor,
 } from './services/migrationRunner';
+import { loadSchema } from './services/schemaLoader';
 import { isMinimumVersion } from './utils/versions';
 
 const KURADB_MINIMUM_POSTGRES_VERSION = '17.0.0';
@@ -45,6 +45,7 @@ async function main() {
 async function handleGenerate(args: string[]) {
   const options = parseGenerateCommandArgs(args);
   const basePath = process.cwd();
+  const schema = loadSchema(basePath);
 
   if (options.typesOnly) {
     generateSchemaTypes(basePath, schema);
@@ -73,6 +74,7 @@ async function handleGenerate(args: string[]) {
 
 async function handleMigrate() {
   const basePath = process.cwd();
+  const schema = loadSchema(basePath);
   const connectionString = getConnectionString();
   const pool = new pg.Pool({
     connectionString,

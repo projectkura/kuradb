@@ -5,13 +5,13 @@ import { defineColumn, defineTable } from '../orm';
 import { db } from '../queryBuilder';
 import { executeQuery } from '../queryBuilder/execute';
 import { eq, lt } from '../queryBuilder/operators';
-import { schema } from '../schema';
 import {
   applyPendingMigrations,
   generateMigrationArtifacts,
   generateSchemaTypes,
 } from '../services/migrationRunner';
 import { getAllMigrations } from '../services/migrationService';
+import { loadSchema } from '../services/schemaLoader';
 
 RegisterCommand(
   'kuradb',
@@ -41,6 +41,7 @@ async function handleGenerate(args: string[]) {
   try {
     const basePath = GetResourcePath(KURADB_RESOURCE_NAME);
     const options = parseGenerateCommandArgs(args);
+    const schema = loadSchema(basePath);
 
     if (options.typesOnly) {
       generateSchemaTypes(basePath, schema);
@@ -75,6 +76,7 @@ async function handleGenerate(args: string[]) {
 async function handleMigrate() {
   try {
     const basePath = GetResourcePath(KURADB_RESOURCE_NAME);
+    const schema = loadSchema(basePath);
     const pending = await applyPendingMigrations(
       basePath,
       schema,

@@ -1,6 +1,6 @@
 {
   "name": "kuradb",
-  "version": "0.0.12",
+  "version": "0.0.13",
   "description": "FiveM PostgreSQL wrapper and ORM foundation for Project Kura",
   "author": "Walteria.net",
   "license": "LGPL-3.0",
@@ -11,7 +11,8 @@
     "dist",
     "lib",
     "cli.js",
-    "fxmanifest.lua"
+    "fxmanifest.lua",
+    "schema.ts"
   ],
   "scripts": {
     "build": "bun run build:manifest && bun run build:server && bun run build:cli && bun run build:lib",
@@ -23,9 +24,9 @@
     "generate": "bun ./cli.js generate",
     "migrate": "bun ./cli.js migrate",
     "check": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.lib.json --noEmit",
-    "lint": "biome check biome.json build.js cli.js package.json tsconfig.json tsconfig.lib.json README.md src lib/KuraDB.ts lib/orm.ts",
+    "lint": "biome check biome.json build.js cli.js package.json schema.ts tsconfig.json tsconfig.lib.json README.md src lib/KuraDB.ts lib/orm.ts",
     "precommit": "bun run lint && bun run check",
-    "format": "biome format --write biome.json build.js cli.js package.json tsconfig.json tsconfig.lib.json README.md src lib/KuraDB.ts lib/orm.ts"
+    "format": "biome format --write biome.json build.js cli.js package.json schema.ts tsconfig.json tsconfig.lib.json README.md src lib/KuraDB.ts lib/orm.ts"
   },
   "dependencies": {
     "pg": "^8.16.0",

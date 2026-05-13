@@ -52,9 +52,14 @@ jobs:
       - name: Prepare release bundle
         run: |
           mkdir -p ./temp/kuradb/{dist,lib}
-          cp ./{LICENSE,README.md,cli.js,fxmanifest.lua,package.json} ./temp/kuradb/ || true
+          cp ./{LICENSE,README.md,cli.js,fxmanifest.lua,package.json,schema.ts} ./temp/kuradb/ || true
           cp -r ./dist/* ./temp/kuradb/dist/ || true
           cp -r ./lib/* ./temp/kuradb/lib/ || true
+
+      - name: Verify release excludes generated schema
+        run: |
+          test -f ./temp/kuradb/schema.ts
+          test ! -f ./temp/kuradb/lib/schema.generated.lua
 
       - name: Smoke test packaged CLI
         run: |

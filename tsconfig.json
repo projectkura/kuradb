@@ -21,6 +21,6 @@
       "orm": ["./src/orm"]
     }
   },
-  "include": ["src/**/*.ts", "build.js", "lib/KuraDB.ts"],
+  "include": ["src/**/*.ts", "schema.ts", "build.js", "lib/KuraDB.ts"],
   "exclude": ["dist", "node_modules"]
 }

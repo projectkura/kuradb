@@ -1,4 +1,4 @@
-import { defineColumn, defineSchema, defineTable } from './orm';
+import { defineColumn, defineSchema, defineTable } from './lib/orm';
 
 export const users = defineTable('public', 'users', {
   id: defineColumn('id', 'uuid', { primaryKey: true }),
