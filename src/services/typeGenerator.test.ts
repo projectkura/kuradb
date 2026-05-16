@@ -1,3 +1,5 @@
+export {};
+
 const assertTypeGen = require('node:assert/strict');
 const {
   mkdtempSync: mkdtempSyncTypeGen,
@@ -69,3 +71,29 @@ testTypeGen(
     });
   }
 );
+
+testTypeGen('generateLuaTypes maps custom kura column kinds into Lua types', () => {
+  const schema = defineSchema('public', {
+    characters: defineTable('public', 'characters', {
+      id: defineColumn('id', 'ulid', { primaryKey: true }),
+      characterIndex: defineColumn('character_index', 'integer'),
+      createdAt: defineColumn('created_at', 'timestamptz'),
+      metadata: defineColumn('metadata', 'jsonb'),
+    }),
+  });
+
+  withTempOutput((outputPath) => {
+    generateLuaTypes(schema, outputPath);
+
+    const output = readFileSyncTypeGen(outputPath, 'utf8');
+
+    assertTypeGen.ok(output.includes("kind = 'ulid'"));
+    assertTypeGen.ok(output.includes("kind = 'integer'"));
+    assertTypeGen.ok(output.includes("kind = 'timestamptz'"));
+    assertTypeGen.ok(output.includes("kind = 'jsonb'"));
+    assertTypeGen.ok(output.includes('---@field id KuraDBColumnRef<string>'));
+    assertTypeGen.ok(output.includes('---@field characterIndex KuraDBColumnRef<number>'));
+    assertTypeGen.ok(output.includes('---@field createdAt KuraDBColumnRef<number>'));
+    assertTypeGen.ok(output.includes('---@field metadata KuraDBColumnRef<table>'));
+  });
+});

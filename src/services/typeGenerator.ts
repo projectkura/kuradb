@@ -115,11 +115,15 @@ function pascalCase(str: string): string {
 function mapColumnTypeToLua(kind: ColumnKind | string): string {
   const typeMap: Record<string, string> = {
     uuid: 'string',
+    ulid: 'string',
     string: 'string',
     number: 'number',
+    integer: 'number',
     boolean: 'boolean',
     date: 'number',
+    timestamptz: 'number',
     json: 'table',
+    jsonb: 'table',
     bigint: 'number',
     custom: 'any',
   };

@@ -201,11 +201,15 @@ export async function getPendingMigrations(
 function mapColumnTypeToSQL(kind: ColumnKind | string): string {
   const typeMap: Record<string, string> = {
     uuid: 'UUID',
+    ulid: 'CHAR(26)',
     string: 'VARCHAR(255)',
     number: 'INTEGER',
+    integer: 'INTEGER',
     boolean: 'BOOLEAN',
     date: 'TIMESTAMP',
+    timestamptz: 'TIMESTAMPTZ',
     json: 'JSONB',
+    jsonb: 'JSONB',
     bigint: 'BIGINT',
     custom: 'TEXT',
   };

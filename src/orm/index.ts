@@ -1,10 +1,14 @@
 export type ColumnKind =
   | 'string'
   | 'number'
+  | 'integer'
   | 'boolean'
   | 'date'
+  | 'timestamptz'
   | 'json'
+  | 'jsonb'
   | 'uuid'
+  | 'ulid'
   | 'bigint'
   | 'custom';
 
