@@ -13,11 +13,14 @@ import { scheduleTick } from '../utils/scheduleTick';
 
 export type DatabaseClient = pg.Pool | pg.PoolClient;
 
-function toQueryResult(pgResult: pg.QueryResult): QueryResult<QueryRow> {
-  const rows = pgResult.rows as QueryRow[];
+export function toQueryResult(
+  pgResult: pg.QueryResult | readonly pg.QueryResult[]
+): QueryResult<QueryRow> {
+  const pgResults = Array.isArray(pgResult) ? pgResult : [pgResult];
+  const rows = pgResults.flatMap((entry) => (entry.rows ?? []) as QueryRow[]);
   const result = rows as QueryResult<QueryRow>;
-  result.count = pgResult.rowCount ?? 0;
-  result.command = pgResult.command;
+  result.count = pgResults.reduce((count, entry) => count + (entry.rowCount ?? 0), 0);
+  result.command = pgResults.at(-1)?.command;
   return result;
 }
 
