@@ -11,6 +11,8 @@ export interface TransactionRequest {
 }
 
 export type TransactionQuery = string[] | [string, ParameterSet][] | TransactionRequest[];
+export type TransactionCallbackResult<T> = T | false | undefined;
+export type TransactionOutcome<T> = Exclude<T, undefined> | true | false;
 
 export type CFXCallback = (result: unknown, err?: string) => void;
 

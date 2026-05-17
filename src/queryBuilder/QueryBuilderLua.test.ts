@@ -1,3 +1,5 @@
+export {};
+
 const assertQueryBuilder = require('node:assert/strict');
 const { readFileSync: readFileSyncQueryBuilder } = require('node:fs');
 const { join: joinQueryBuilder } = require('node:path');

@@ -4,7 +4,9 @@ import type {
   ParameterSet,
   QueryResult,
   QueryRow,
+  TransactionCallbackResult,
   TransactionOptions,
+  TransactionOutcome,
 } from '../types';
 import { normalizeQuery } from '../utils/sql';
 import { type DatabaseClient, executeQuery, withTransaction } from './connection';
@@ -25,11 +27,11 @@ async function runQuery(
   }) as Promise<QueryResult<QueryRow>>;
 }
 
-export async function startTransaction(
+export async function startTransaction<T = true>(
   invokingResource: string,
   queries: (
     query: (statement: string, values?: ParameterSet) => Promise<QueryResult<QueryRow>>
-  ) => Promise<boolean | undefined>,
+  ) => Promise<TransactionCallbackResult<T>>,
   options?: TransactionOptions,
   cb?: CFXCallback,
   isPromise?: boolean
@@ -43,20 +45,20 @@ export async function startTransaction(
     );
   }
 
-  let response = false;
+  let response: TransactionOutcome<T> = true;
 
   try {
     await withTransaction(pool, options ?? {}, async (client: DatabaseClient) => {
-      const shouldCommit = await queries((statement, values) =>
+      const result = await queries((statement, values) =>
         runQuery(client, invokingResource, statement, values, options)
       );
 
-      if (shouldCommit === false) {
+      if (result === false) {
         throw new ManualRollbackError('Transaction was cancelled by startTransaction callback.');
       }
-    });
 
-    response = true;
+      response = result === undefined ? true : (result as Exclude<T, undefined>);
+    });
   } catch (err) {
     if (err instanceof ManualRollbackError) {
       response = false;

@@ -12,6 +12,7 @@ import type {
 import { scheduleTick } from '../utils/scheduleTick';
 
 export type DatabaseClient = pg.Pool | pg.PoolClient;
+export type DatabaseTransactionClient = pg.PoolClient;
 
 export function toQueryResult(
   pgResult: pg.QueryResult | readonly pg.QueryResult[]
@@ -77,18 +78,56 @@ export async function withTransaction<T>(
   options: TransactionOptions,
   fn: (client: pg.PoolClient) => Promise<T>
 ): Promise<T> {
+  const client = await beginTransactionClient(pool, options);
+  let completed = false;
+
+  try {
+    const result = await fn(client);
+    await commitTransactionClient(client);
+    completed = true;
+    return result;
+  } catch (err) {
+    if (!completed) {
+      await rollbackTransactionClient(client).catch(() => {});
+      completed = true;
+    }
+
+    throw err;
+  }
+}
+
+export async function beginTransactionClient(
+  pool: import('pg').Pool,
+  options: TransactionOptions
+): Promise<DatabaseTransactionClient> {
   scheduleTick();
 
   const client = await pool.connect();
 
   try {
     await client.query(getTransactionBeginSQL(options));
-    const result = await fn(client);
-    await client.query('COMMIT');
-    return result;
+    return client;
   } catch (err) {
-    await client.query('ROLLBACK').catch(() => {});
+    client.release();
     throw err;
+  }
+}
+
+export async function commitTransactionClient(client: DatabaseTransactionClient) {
+  scheduleTick();
+
+  try {
+    await client.query('COMMIT');
+  } finally {
+    client.release();
+  }
+}
+
+export async function rollbackTransactionClient(client: DatabaseTransactionClient) {
+  scheduleTick();
+
+  try {
+    await client.query('ROLLBACK').catch(() => {});
   } finally {
     client.release();
   }

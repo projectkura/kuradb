@@ -1,5 +1,6 @@
 import { setDebug } from '../config';
 import { sleep } from '../utils/sleep';
+import { closeLuaTransactionSessions, rollbackLuaTransactionsForResource } from './luaTransaction';
 import { closeConnectionPool, createConnectionPool, pool } from './pool';
 
 setTimeout(async () => {
@@ -19,11 +20,19 @@ setInterval(() => {
 }, 1000);
 
 on('onResourceStop', (resourceName: string) => {
-  if (resourceName !== GetCurrentResourceName()) return;
-  void closeConnectionPool();
+  if (resourceName === GetCurrentResourceName()) {
+    void (async () => {
+      await closeLuaTransactionSessions();
+      await closeConnectionPool();
+    })();
+    return;
+  }
+
+  void rollbackLuaTransactionsForResource(resourceName);
 });
 
 export * from './connection';
+export * from './luaTransaction';
 export * from './pool';
 export * from './primitives';
 export * from './rawExecute';

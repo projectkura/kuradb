@@ -75,8 +75,8 @@
 ---@field delete fun(tbl: KuraDBTable<any, any, any>|string): KuraDeleteBuilder
 
 ---@class KuraDBTransactionCallable
----@field await fun(cb: fun(query: function, tx: KuraDBTransactionContext): boolean|nil, transactionOptions?: table): boolean
----@operator call: fun(cb: fun(query: function, tx: KuraDBTransactionContext): boolean|nil, transactionOptions?: table): boolean
+---@field await fun(cb: fun(query: function, tx: KuraDBTransactionContext): any, transactionOptions?: table): any|false
+---@operator call: fun(cb: fun(query: function, tx: KuraDBTransactionContext): any, transactionOptions?: table): any|false
 
 ---@class KuraSelectBuilder<TRow>
 local KuraSelectBuilder = {}

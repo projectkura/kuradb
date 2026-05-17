@@ -1,5 +1,7 @@
 import { KURADB_RESOURCE_NAME } from './config';
 import {
+  beginLuaTransaction,
+  finishLuaTransaction,
   pool,
   rawBatch,
   rawCopyFrom,
@@ -12,6 +14,7 @@ import {
   rawTransaction,
   rawUnlisten,
   startTransaction,
+  stepLuaTransaction,
 } from './database';
 import type {
   BatchOptions,
@@ -148,12 +151,43 @@ kuradbExports.transaction = (
 kuradbExports.startTransaction = (
   queries: (
     query: (statement: string, values?: ParameterSet) => Promise<unknown>
-  ) => Promise<boolean | undefined>,
+  ) => Promise<unknown>,
   options?: TransactionOptions,
   cb?: CFXCallback,
   invokingResource = GetInvokingResource()
 ) => {
   return startTransaction(invokingResource, queries as any, options, cb, true);
+};
+
+kuradbExports.beginLuaTransaction = (
+  options?: TransactionOptions | CFXCallback,
+  cb?: CFXCallback,
+  invokingResource = GetInvokingResource(),
+  isPromise?: boolean
+) => {
+  void beginLuaTransaction(invokingResource, options, cb, isPromise);
+};
+
+kuradbExports.stepLuaTransaction = (
+  sessionId: string,
+  query: string,
+  parameters?: CFXParameters,
+  cb?: CFXCallback,
+  invokingResource = GetInvokingResource(),
+  isPromise?: boolean
+) => {
+  void stepLuaTransaction(invokingResource, sessionId, query, parameters, cb, isPromise);
+};
+
+kuradbExports.finishLuaTransaction = (
+  sessionId: string,
+  shouldCommit: boolean,
+  payload?: unknown | CFXCallback,
+  cb?: CFXCallback,
+  invokingResource = GetInvokingResource(),
+  isPromise?: boolean
+) => {
+  void finishLuaTransaction(invokingResource, sessionId, shouldCommit, payload, cb, isPromise);
 };
 
 kuradbExports.notify = (

@@ -9,6 +9,8 @@ type Transaction =
   | string[]
   | [string, Params][]
   | { query: string; values?: Params; parameters?: Params }[];
+type TransactionCallbackResult<T> = T | false | undefined;
+type TransactionOutcome<T> = Exclude<T, undefined> | true | false;
 
 type TransactionOptions = {
   isolationLevel?: 'READ COMMITTED' | 'READ UNCOMMITTED' | 'REPEATABLE READ' | 'SERIALIZABLE';
@@ -134,12 +136,12 @@ interface kuradb_client {
   ) => Promise<string>;
   isReady: () => boolean;
   awaitConnection: () => Promise<true>;
-  startTransaction: (
+  startTransaction: <T = true>(
     cb: (
       query: <T = QueryResult>(statement: string, params?: Params) => Promise<T>
-    ) => Promise<boolean | undefined>,
+    ) => Promise<TransactionCallbackResult<T>>,
     options?: TransactionOptions
-  ) => Promise<boolean>;
+  ) => Promise<TransactionOutcome<T>>;
 }
 
 declare const global: {
@@ -437,7 +439,12 @@ export const kuradb: kuradb_client = {
   async awaitConnection() {
     return exportsObject.awaitConnection() as Promise<true>;
   },
-  async startTransaction(cb, options) {
-    return execute('startTransaction', cb, options) as Promise<boolean>;
+  async startTransaction<T = true>(
+    cb: (
+      query: <TResult = QueryResult>(statement: string, params?: Params) => Promise<TResult>
+    ) => Promise<TransactionCallbackResult<T>>,
+    options?: TransactionOptions
+  ) {
+    return execute('startTransaction', cb, options) as Promise<TransactionOutcome<T>>;
   },
 };

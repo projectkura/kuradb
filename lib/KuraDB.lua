@@ -131,18 +131,49 @@ local function parseTransactionBuilderResult(method, result)
   return result
 end
 
-local function wrapTransactionCallback(cb)
+local function beginLuaTransaction(transactionOptions)
+  return awaitExport(kuradb.beginLuaTransaction, transactionOptions)
+end
+
+local function stepLuaTransaction(sessionId, statement, values)
+  return awaitExport(kuradb.stepLuaTransaction, sessionId, statement, values)
+end
+
+local function finishLuaTransaction(sessionId, shouldCommit, payload)
+  return awaitExport(kuradb.finishLuaTransaction, sessionId, shouldCommit, payload)
+end
+
+local function runTransaction(cb, transactionOptions)
   assert(type(cb) == 'function', "First argument expected function")
 
-  return function(query)
-    local executor = function(method, statement, values)
-      local result = query(statement, values)
-      return parseTransactionBuilderResult(method, result)
-    end
-
-    local tx = db._createTransactionContext and db._createTransactionContext(executor) or nil
-    return cb(query, tx)
+  local sessionId = beginLuaTransaction(transactionOptions)
+  local function query(statement, values)
+    return stepLuaTransaction(sessionId, statement, values)
   end
+
+  local executor = function(method, statement, values)
+    local result = query(statement, values)
+    return parseTransactionBuilderResult(method, result)
+  end
+
+  local tx = db._createTransactionContext and db._createTransactionContext(executor) or nil
+  local ok, result = pcall(function()
+    return cb(query, tx)
+  end)
+
+  if not ok then
+    pcall(function()
+      finishLuaTransaction(sessionId, false)
+    end)
+
+    error(result, 0)
+  end
+
+  if result == false then
+    return finishLuaTransaction(sessionId, false)
+  end
+
+  return finishLuaTransaction(sessionId, true, result)
 end
 
 -- ============================================================
@@ -313,17 +344,10 @@ db.ready = setmetatable({
 
 db.transaction = setmetatable({
   await = function(cb, transactionOptions)
-    return awaitExport(kuradb.startTransaction, wrapTransactionCallback(cb), transactionOptions)
+    return runTransaction(cb, transactionOptions)
   end
 }, {
   __call = function(_, cb, transactionOptions)
-    return kuradb.startTransaction(
-      nil,
-      wrapTransactionCallback(cb),
-      transactionOptions,
-      nil,
-      resourceName,
-      true
-    )
+    return runTransaction(cb, transactionOptions)
   end,
 })
